@@ -1,5 +1,68 @@
 FROM public.ecr.aws/lambda/python:3.12
 
+ENV PYTHONUNBUFFERED=1
+ENV R2R_PORT=7272
+ENV R2R_HOST=0.0.0.0
+
+# R2R
+ENV R2R_CONFIG_NAME=deafult
+ENV R2R_CONFIG_PATH=
+ENV R2R_PROJECT_NAME=r2r_default
+
+# Postgres
+ENV R2R_POSTGRES_USER=postgres
+ENV R2R_POSTGRES_PASSWORD=postgres
+ENV R2R_POSTGRES_HOST=accelerate.cve6yckassr1.ap-northeast-1.rds.amazonaws.com
+ENV R2R_POSTGRES_PORT=5432
+ENV R2R_POSTGRES_DBNAME=postgres
+ENV R2R_POSTGRES_MAX_CONNECTIONS=1024
+ENV R2R_POSTGRES_PROJECT_NAME=r2r_default
+
+# OpenAI
+ENV OPENAI_API_KEY=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
+ENV OPENAI_API_BASE=
+
+# Anthropic
+ENV ANTHROPIC_API_KEY=
+
+# Azure
+ENV AZURE_API_KEY=
+ENV AZURE_API_BASE=
+ENV AZURE_API_VERSION=
+
+# Google Vertex AI
+ENV GOOGLE_APPLICATION_CREDENTIALS=
+ENV VERTEX_PROJECT=
+ENV VERTEX_LOCATION=
+
+# AWS Bedrock
+ENV AWS_ACCESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
+ENV AWS_REGION_NAME=
+
+# Groq
+ENV GROQ_API_KEY=
+
+# Cohere
+ENV COHERE_API_KEY=
+
+# Anyscale
+ENV ANYSCALE_API_KEY=
+
+# Ollama
+ENV OLLAMA_API_BASE=http://host.docker.internal:11434
+
+# Unstructured
+ENV UNSTRUCTURED_API_KEY=
+ENV UNSTRUCTURED_API_URL=https://api.unstructured.io/general/v0/general
+ENV UNSTRUCTURED_LOCAL_URL=http://unstructured:7275
+ENV UNSTRUCTURED_NUM_WORKERS=10
+
+# Hatchet
+ENV HATCHET_CLIENT_TLS_STRATEGY=none
+ENV HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH=13421772800
+ENV HATCHET_CLIENT_GRPC_MAX_SEND_MESSAGE_LENGTH=13421772800
+
 # Copy requirements.txt
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
@@ -7,7 +70,7 @@ COPY requirements.txt ${LAMBDA_TASK_ROOT}
 RUN pip install -r requirements.txt
 
 # Copy function code
-COPY lambda_function.py ${LAMBDA_TASK_ROOT}
+COPY core/ shared/ ${LAMBDA_TASK_ROOT}
 
 # Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
-CMD [ "lambda_function.handler" ]
+CMD [ "core/main/app_entry.handler" ]
