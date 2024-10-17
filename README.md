@@ -1,8 +1,25 @@
 # R2R Lambda Only
 
 
-## requirements
-- mangum==0.11.0は固定。これ以上上げると動かない
+## Requirements
+> [!CAUTION]  
+> mangum==0.11.0のバージョンは固定です。これ以上上げると動きません。
+
+## Setup（Dockerを使わない場合のみ）
+> [!NOTE]  
+> Dockerを使わない場合のみセットアップ作業を行ってください
+
+- 仮想環境を作成する
+
+```bash
+python -m venv accelerate-workspace
+```
+
+- モジュールのインストール
+
+```bash
+pip install -r requirements.txt
+```
 
 
 ## Run
