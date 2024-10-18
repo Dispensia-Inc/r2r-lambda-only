@@ -5,7 +5,15 @@
 > [!CAUTION]  
 > mangum==0.11.0のバージョンは固定です。これ以上上げると動きません。
 
-## Setup（Dockerを使わないローカル環境のみのみ）
+## Setup
+
+###  環境変数の設定
+
+- `.env.example`をコピーして`.env`というファイル名で同じ階層に保存してください
+- `R2R_PROJECT_NAME`はPostgreSQLのスキーマ名になります
+- `OPENAI_API_KEY`にはOpenAIのAPIキーを指定します
+
+### Dockerを使わないローカル環境のみ
 > [!NOTE]  
 > Dockerを使わない場合のみセットアップ作業を行ってください
 
