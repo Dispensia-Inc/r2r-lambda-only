@@ -89,3 +89,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# export port 8080
+# handler = Mangum(app)
