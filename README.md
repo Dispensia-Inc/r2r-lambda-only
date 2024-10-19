@@ -1,4 +1,4 @@
-# R2R Lambda Only
+# R2R Lambda
 
 ## Environments
 - Python 3.12
@@ -61,7 +61,7 @@ make docker-run
 
 ## 動作確認
 
-- R2Rのヘルスチェックを行うリクエスト
+- R2Rに対してヘルスチェックを行うリクエスト
 
 ```bash
 curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations" \
@@ -78,6 +78,34 @@ curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations"
 
 ```bash
 {"isBase64Encoded": false, "statusCode": 200, "headers": {"content-length": "18", "content-type": "application/json"}, "body": "{\"message\":\"test\"}"}
+```
+
+## AWS ECRにデプロイ
+
+> [!IMPORTANT]
+> 以下のコマンドを実行するにはaws-cliが必要です。
+
+```bash
+make build
+```
+
+### もしくは
+
+
+```bash
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com
+```
+
+```bash
+make docker-build
+```
+
+```bash
+docker tag accelerate/r2r-lambda:latest 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda:latest
+```
+
+```bash
+docker push 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda:latest
 ```
 
 
