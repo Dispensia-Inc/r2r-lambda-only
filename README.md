@@ -1,7 +1,12 @@
 # R2R Lambda Only
 
+## Environments
+- Python 3.12
 
 ## Requirements
+
+- `requirements.txt`に記述しています
+
 > [!CAUTION]  
 > mangum==0.11.0のバージョンは固定です。これ以上上げると動きません。
 
@@ -15,7 +20,7 @@
 
 ### Dockerを使わないローカル環境のみ
 > [!NOTE]  
-> Dockerを使わない場合のみセットアップ作業を行ってください
+> Dockerを使わない場合のみ以下のセットアップ作業を行ってください
 
 - 仮想環境を作成する
 
@@ -42,27 +47,27 @@ pip install -r requirements.txt
 ## Run (ローカル環境)
 
 ```bash
-uvicorn core.main.app_entry:app --env-file .env --port 3000
+make dev
 ```
 
 ## Run (Docker環境)
 ```bash
-docker build -t r2r-lambda-only .
+make docker-build
 ```
 
 ```bash
-docker run -p 9000:8080 r2r-lambda-only
+make docker-run
 ```
 
 ## 動作確認
 
-- リクエスト
+- R2Rのヘルスチェックを行うリクエスト
 
 ```bash
 curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations" \
 -H 'Content-Type: application/json; charset=utf-8' \
 -d $'{
-  "path": "/test1",
+  "path": "/v2/health",
   "requestContext": {},
   "httpMethod": "GET",
   "multiValueQueryStringParameters": {}
