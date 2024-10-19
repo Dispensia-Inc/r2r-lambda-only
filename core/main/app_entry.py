@@ -5,8 +5,8 @@ from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+from fastapi.middleware.cors import CORSMiddleware
 
 from .assembly import R2RBuilder, R2RConfig
 
@@ -91,4 +91,4 @@ app.add_middleware(
 )
 
 # export port 8080
-# handler = Mangum(app)
+handler = Mangum(app)
