@@ -36,7 +36,10 @@ class R2RPromptProvider(PromptProvider):
     async def initialize(self):
         try:
             self.pool = await asyncpg.create_pool(
-                self.db_provider.connection_string
+                self.db_provider.connection_string,
+                min_size=1,
+                max_size=3,
+                max_inactive_connection_lifetime=10
             )
             logger.info(
                 "R2RPromptProvider successfully connected to Postgres database."

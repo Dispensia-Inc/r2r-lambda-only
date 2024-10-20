@@ -43,7 +43,9 @@ class PostgresRelationalDBProvider(
         try:
             self.pool = await asyncpg.create_pool(
                 self.connection_string,
+                min_size=1,
                 max_size=self.postgres_configuration_settings.max_connections,
+                max_inactive_connection_lifetime=10
             )
 
             logger.info(

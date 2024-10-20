@@ -377,6 +377,9 @@ class PostgresRunLoggingProvider(RunLoggingProvider):
             host=os.getenv("POSTGRES_HOST"),
             port=os.getenv("POSTGRES_PORT"),
             statement_cache_size=0,  # Disable statement caching
+            min_size=1,
+            max_size=3,
+            max_inactive_connection_lifetime=10
         )
         async with self.pool.acquire() as conn:
 

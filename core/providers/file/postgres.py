@@ -33,7 +33,10 @@ class PostgresFileProvider(FileProvider):
 
     async def initialize(self):
         self.pool = await asyncpg.create_pool(
-            self.db_provider.connection_string
+            self.db_provider.connection_string,
+            min_size=1,
+            max_size=3,
+            max_inactive_connection_lifetime=10
         )
         logger.info(
             "File provider successfully connected to Postgres database."
