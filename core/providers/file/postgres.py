@@ -9,7 +9,7 @@ from core.base import FileConfig, R2RException
 from core.base.providers import FileProvider
 from core.providers.database.postgres import PostgresDBProvider
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class PostgresFileProvider(FileProvider):
@@ -33,10 +33,7 @@ class PostgresFileProvider(FileProvider):
 
     async def initialize(self):
         self.pool = await asyncpg.create_pool(
-            self.db_provider.connection_string,
-            min_size=1,
-            max_size=3,
-            max_inactive_connection_lifetime=10
+            self.db_provider.connection_string
         )
         logger.info(
             "File provider successfully connected to Postgres database."

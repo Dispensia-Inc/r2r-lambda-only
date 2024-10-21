@@ -1,8 +1,10 @@
 import concurrent.futures
 import copy
+import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from sqlalchemy import text
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
@@ -14,17 +16,18 @@ from core.base import (
     VectorSearchResult,
 )
 from core.base.abstractions import VectorSearchSettings
-
-from .vecs import (
-    Client,
-    Collection,
+from shared.abstractions.vector import (
     IndexArgsHNSW,
+    IndexArgsIVFFlat,
     IndexMeasure,
     IndexMethod,
-    create_client,
+    VectorQuantizationType,
+    VectorTableName,
 )
 
-logger = logging.getLogger(__name__)
+from .vecs import Client, Collection, create_client
+
+logger = logging.getLogger()
 
 
 class PostgresVectorDBProvider(VectorDBProvider):
@@ -50,17 +53,20 @@ class PostgresVectorDBProvider(VectorDBProvider):
                 "Please provide a valid `project_name` to the `PostgresVectorDBProvider`."
             )
         dimension = kwargs.get("dimension", None)
+        quantization_type = kwargs.get("quantization_type", None)
         if not dimension:
             raise ValueError(
                 "Please provide a valid `dimension` to the `PostgresVectorDBProvider`."
             )
 
-        self._initialize_vector_db(dimension)
+        self._initialize_vector_db(dimension, quantization_type)
         logger.info(
             f"Successfully initialized PGVectorDB for project: {self.project_name}"
         )
 
-    def _initialize_vector_db(self, dimension: int) -> None:
+    def _initialize_vector_db(
+        self, dimension: int, quantization_type: VectorQuantizationType
+    ) -> None:
         # Create extension for trigram similarity
         with self.vx.Session() as sess:
             sess.execute(text(f"CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
@@ -68,9 +74,13 @@ class PostgresVectorDBProvider(VectorDBProvider):
             sess.commit()
 
         self.collection = self.vx.get_or_create_vector_table(
-            name=self.project_name, dimension=dimension
+            name=self.project_name,
+            dimension=dimension,
+            quantization_type=quantization_type,
         )
-        self.create_index()
+
+        # NOTE: Do not create an index during initialization
+        # self.create_index()
 
     def upsert(self, entry: VectorEntry) -> None:
         if self.collection is None:
@@ -289,24 +299,31 @@ class PostgresVectorDBProvider(VectorDBProvider):
 
     def create_index(
         self,
-        index_type=IndexMethod.hnsw,
-        measure=IndexMeasure.cosine_distance,
-        index_options=None,
+        table_name: Optional[VectorTableName] = None,
+        index_method: IndexMethod = IndexMethod.hnsw,
+        measure: IndexMeasure = IndexMeasure.cosine_distance,
+        index_arguments: Optional[
+            Union[IndexArgsHNSW, IndexArgsIVFFlat]
+        ] = None,
+        replace: bool = True,
+        concurrently: bool = True,
     ):
         if self.collection is None:
             raise ValueError("Collection is not initialized.")
 
-        if index_options is None:
-            index_options = IndexArgsHNSW(
-                m=16, ef_construction=64
-            )  # Default HNSW parameters
+        start_time = time.time()
 
         self.collection.create_index(
-            method=index_type,
+            table_name=table_name,
+            method=index_method,
             measure=measure,
-            index_arguments=index_options,
-            replace=True,
+            index_arguments=index_arguments,
+            replace=replace,
+            concurrently=concurrently,
         )
+
+        end_time = time.time()
+        logger.info(f"Index creation took {end_time - start_time:.2f} seconds")
 
     def delete(
         self,
@@ -474,16 +491,25 @@ class PostgresVectorDBProvider(VectorDBProvider):
                 raise
 
     def get_document_chunks(
-        self, document_id: str, offset: int = 0, limit: int = -1
+        self,
+        document_id: str,
+        offset: int = 0,
+        limit: int = -1,
+        include_vectors: bool = False,
     ) -> dict[str, Any]:
         if not self.collection:
             raise ValueError("Collection is not initialized.")
 
         limit_clause = f"LIMIT {limit}" if limit != -1 else ""
         table_name = self.collection.table.name
+
+        select_clause = "SELECT extraction_id, document_id, user_id, collection_ids, text, metadata"
+        if include_vectors:
+            select_clause += ", vec"
+
         query = text(
             f"""
-            SELECT extraction_id, document_id, user_id, collection_ids, text, metadata, COUNT(*) OVER() AS total
+            {select_clause}, COUNT(*) OVER() AS total
             FROM {self.project_name}."{table_name}"
             WHERE document_id = :document_id
             ORDER BY CAST(metadata->>'chunk_order' AS INTEGER)
@@ -502,7 +528,7 @@ class PostgresVectorDBProvider(VectorDBProvider):
         total = 0
 
         if results:
-            total = results[0][6]
+            total = results[0][-1]  # Get the total count from the last column
             chunks = [
                 {
                     "extraction_id": result[0],
@@ -511,6 +537,9 @@ class PostgresVectorDBProvider(VectorDBProvider):
                     "collection_ids": result[3],
                     "text": result[4],
                     "metadata": result[5],
+                    "vector": (
+                        json.loads(result[6]) if include_vectors else None
+                    ),
                 }
                 for result in results
             ]

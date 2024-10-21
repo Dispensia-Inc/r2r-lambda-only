@@ -1,6 +1,7 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
-import asyncio
+
 import asyncpg
 
 from core.base import RelationalDBProvider
@@ -10,7 +11,7 @@ from core.providers.database.document import DocumentMixin
 from core.providers.database.tokens import BlacklistedTokensMixin
 from core.providers.database.user import UserMixin
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class PostgresRelationalDBProvider(
@@ -43,9 +44,7 @@ class PostgresRelationalDBProvider(
         try:
             self.pool = await asyncpg.create_pool(
                 self.connection_string,
-                min_size=1,
                 max_size=self.postgres_configuration_settings.max_connections,
-                max_inactive_connection_lifetime=10
             )
 
             logger.info(

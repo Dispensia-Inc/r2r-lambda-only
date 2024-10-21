@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from shared.api.models.base import PaginatedResultsWrapper, ResultsWrapper
+
+from ....abstractions.llm import Message
 
 
 class UpdatePromptResponse(BaseModel):
@@ -104,9 +106,7 @@ class DocumentChunkResponse(BaseModel):
     collection_ids: list[UUID]
     text: str
     metadata: dict[str, Any]
-
-
-KnowledgeGraphResponse = str
+    vector: Optional[list[float]] = None
 
 
 class CollectionResponse(BaseModel):
@@ -127,6 +127,11 @@ class CollectionOverviewResponse(BaseModel):
     document_count: int
 
 
+class ConversationOverviewResponse(BaseModel):
+    conversation_id: UUID
+    created_at: datetime
+
+
 class AddUserResponse(BaseModel):
     result: bool
 
@@ -138,25 +143,27 @@ WrappedServerStatsResponse = ResultsWrapper[ServerStats]
 WrappedLogResponse = ResultsWrapper[list[LogResponse]]
 WrappedAnalyticsResponse = ResultsWrapper[AnalyticsResponse]
 WrappedAppSettingsResponse = ResultsWrapper[AppSettingsResponse]
-WrappedScoreCompletionResponse = ResultsWrapper[ScoreCompletionResponse]
 WrappedUserOverviewResponse = PaginatedResultsWrapper[
     list[UserOverviewResponse]
 ]
+WrappedConversationResponse = ResultsWrapper[list[Tuple[str, Message]]]
 WrappedDocumentOverviewResponse = PaginatedResultsWrapper[
     list[DocumentOverviewResponse]
 ]
-WrappedKnowledgeGraphResponse = ResultsWrapper[KnowledgeGraphResponse]
 WrappedCollectionResponse = ResultsWrapper[CollectionResponse]
 WrappedCollectionListResponse = ResultsWrapper[list[CollectionResponse]]
 WrappedCollectionOverviewResponse = ResultsWrapper[
     list[CollectionOverviewResponse]
 ]
-WrappedAddUserResponse = ResultsWrapper[AddUserResponse]
+WrappedAddUserResponse = ResultsWrapper[None]
 WrappedUsersInCollectionResponse = PaginatedResultsWrapper[list[UserResponse]]
 WrappedUserCollectionResponse = PaginatedResultsWrapper[
-    list[CollectionOverviewResponse]
+    list[CollectionResponse]
 ]
 WrappedDocumentChunkResponse = PaginatedResultsWrapper[
     list[DocumentChunkResponse]
 ]
 WrappedDeleteResponse = ResultsWrapper[None]
+WrappedConversationsOverviewResponse = PaginatedResultsWrapper[
+    list[ConversationOverviewResponse]
+]

@@ -13,7 +13,7 @@ from core.base.abstractions import GenerationConfig
 
 from ..abstractions.generator_pipe import GeneratorPipe
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class QueryTransformPipe(GeneratorPipe):
@@ -65,7 +65,7 @@ class QueryTransformPipe(GeneratorPipe):
             )
 
             query_transform_request = (
-                self.prompt_provider._get_message_payload(
+                await self.prompt_provider._get_message_payload(
                     system_prompt_name=self.config.system_prompt,
                     task_prompt_name=self.config.task_prompt,
                     task_inputs={

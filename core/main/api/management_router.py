@@ -2,7 +2,7 @@
 import json
 import mimetypes
 from datetime import datetime, timezone
-from typing import Optional, Set
+from typing import Any, Optional, Set
 from uuid import UUID
 
 import psutil
@@ -10,7 +10,7 @@ from fastapi import Body, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import Json
 
-from core.base import R2RException
+from core.base import R2RException, Message
 from core.base.api.models import (
     WrappedAddUserResponse,
     WrappedAnalyticsResponse,
@@ -18,21 +18,22 @@ from core.base.api.models import (
     WrappedCollectionListResponse,
     WrappedCollectionOverviewResponse,
     WrappedCollectionResponse,
+    WrappedConversationResponse,
     WrappedDeleteResponse,
     WrappedDocumentChunkResponse,
     WrappedDocumentOverviewResponse,
     WrappedGetPromptsResponse,
-    WrappedKnowledgeGraphResponse,
     WrappedLogResponse,
     WrappedPromptMessageResponse,
-    WrappedScoreCompletionResponse,
     WrappedServerStatsResponse,
     WrappedUserCollectionResponse,
     WrappedUserOverviewResponse,
     WrappedUsersInCollectionResponse,
+    WrappedConversationsOverviewResponse,
 )
 from core.base.logging import AnalysisTypes, LogFilterCriteria
 from core.base.providers import OrchestrationProvider
+from shared.abstractions.kg import KGRunType
 
 from ..services.management_service import ManagementService
 from .base_router import BaseRouter, RunType
@@ -224,18 +225,6 @@ class ManagementRouter(BaseRouter):
                 )
             return await self.service.app_settings()
 
-        @self.router.post("/score_completion")
-        @self.base_endpoint
-        async def score_completion(
-            message_id: str = Body(..., description="Message ID"),
-            score: float = Body(..., description="Completion score"),
-            auth_user=Depends(self.service.providers.auth.auth_wrapper),
-        ) -> WrappedScoreCompletionResponse:
-            message_uuid = UUID(message_id)
-            return await self.service.score_completion(
-                message_id=message_uuid, score=score
-            )
-
         @self.router.get("/users_overview")
         @self.base_endpoint
         async def users_overview_app(
@@ -268,8 +257,26 @@ class ManagementRouter(BaseRouter):
             filters: str = Query(..., description="JSON-encoded filters"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ):
-            filters_dict = json.loads(filters) if filters else None
-            return await self.service.delete(filters=filters_dict)  # type: ignore
+            try:
+                filters_dict = json.loads(filters)
+            except json.JSONDecodeError:
+                raise R2RException(
+                    status_code=422, message="Invalid JSON in filters"
+                )
+
+            if not isinstance(filters_dict, dict):
+                raise R2RException(
+                    status_code=422, message="Filters must be a JSON object"
+                )
+
+            for key, value in filters_dict.items():
+                if not isinstance(value, dict):
+                    raise R2RException(
+                        status_code=422,
+                        message=f"Invalid filter format for key: {key}",
+                    )
+
+            return await self.service.delete(filters=filters_dict)
 
         @self.router.get(
             "/download_file/{document_id}", response_class=StreamingResponse
@@ -288,7 +295,7 @@ class ManagementRouter(BaseRouter):
                 document_uuid = UUID(document_id)
             except ValueError:
                 raise R2RException(
-                    status_code=400, message="Invalid document ID format."
+                    status_code=422, message="Invalid document ID format."
                 )
 
             file_tuple = await self.service.download_file(document_uuid)
@@ -323,19 +330,28 @@ class ManagementRouter(BaseRouter):
         async def documents_overview_app(
             document_ids: list[str] = Query([]),
             offset: int = Query(0, ge=0),
-            limit: int = Query(100, ge=1, le=1000),
+            limit: int = Query(
+                100,
+                ge=-1,
+                description="Number of items to return. Use -1 to return all items.",
+            ),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedDocumentOverviewResponse:
             request_user_ids = (
                 None if auth_user.is_superuser else [auth_user.id]
             )
+
+            filter_collection_ids = (
+                None if auth_user.is_superuser else auth_user.collection_ids
+            )
+
             document_uuids = [
                 UUID(document_id) for document_id in document_ids
             ]
             documents_overview_response = (
                 await self.service.documents_overview(
                     user_ids=request_user_ids,
-                    collection_ids=auth_user.collection_ids,
+                    collection_ids=filter_collection_ids,
                     document_ids=document_uuids,
                     offset=offset,
                     limit=limit,
@@ -351,12 +367,13 @@ class ManagementRouter(BaseRouter):
             document_id: str = Path(...),
             offset: Optional[int] = Query(0, ge=0),
             limit: Optional[int] = Query(100, ge=0),
+            include_vectors: Optional[bool] = Query(False),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedDocumentChunkResponse:
             document_uuid = UUID(document_id)
 
             document_chunks = await self.service.document_chunks(
-                document_uuid, offset, limit
+                document_uuid, offset, limit, include_vectors
             )
 
             document_chunks_result = document_chunks["results"]
@@ -370,8 +387,24 @@ class ManagementRouter(BaseRouter):
             is_owner = str(document_chunks_result[0].get("user_id")) == str(
                 auth_user.id
             )
+            document_collections = await self.service.document_collections(
+                document_uuid, 0, -1
+            )
 
-            if not is_owner and not auth_user.is_superuser:
+            user_has_access = (
+                is_owner
+                or set(auth_user.collection_ids).intersection(
+                    set(
+                        [
+                            ele.collection_id
+                            for ele in document_collections["results"]
+                        ]
+                    )
+                )
+                != set()
+            )
+
+            if not user_has_access and not auth_user.is_superuser:
                 raise R2RException(
                     "Only a superuser can arbitrarily call document_chunks.",
                     403,
@@ -491,7 +524,7 @@ class ManagementRouter(BaseRouter):
         async def delete_collection_app(
             collection_id: str = Path(..., description="Collection ID"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
-        ):
+        ) -> WrappedDeleteResponse:
             collection_uuid = UUID(collection_id)
             if (
                 not auth_user.is_superuser
@@ -501,7 +534,8 @@ class ManagementRouter(BaseRouter):
                     "The currently authenticated user does not have access to the specified collection.",
                     403,
                 )
-            return await self.service.delete_collection(collection_uuid)  # type: ignore
+            await self.service.delete_collection(collection_uuid)
+            return None  # type: ignore
 
         @self.router.get("/list_collections")
         @self.base_endpoint
@@ -512,7 +546,8 @@ class ManagementRouter(BaseRouter):
         ) -> WrappedCollectionListResponse:
             if not auth_user.is_superuser:
                 raise R2RException(
-                    "Only a superuser can list all collections.", 403
+                    "Only a superuser can call the list collections endpoint.",
+                    403,
                 )
             list_collections_response = await self.service.list_collections(
                 offset=offset, limit=min(max(limit, 1), 1000)
@@ -543,7 +578,7 @@ class ManagementRouter(BaseRouter):
             result = await self.service.add_user_to_collection(
                 user_uuid, collection_uuid
             )
-            return {"result": result}  # type: ignore
+            return result  # type: ignore
 
         @self.router.post("/remove_user_from_collection")
         @self.base_endpoint
@@ -611,7 +646,7 @@ class ManagementRouter(BaseRouter):
             ),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedUserCollectionResponse:
-            if str(auth_user.id) != user_id or not auth_user.is_superuser:
+            if str(auth_user.id) != user_id and not auth_user.is_superuser:
                 raise R2RException(
                     "The currently authenticated user does not have access to the specified collection.",
                     403,
@@ -655,6 +690,14 @@ class ManagementRouter(BaseRouter):
             document_id: str = Body(..., description="Document ID"),
             collection_id: str = Body(..., description="Collection ID"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
+            run_type: Optional[KGRunType] = Body(
+                default=KGRunType.ESTIMATE,
+                description="Run type for the graph enrichment process.",
+            ),
+            kg_enrichment_settings: Optional[dict] = Body(
+                default=None,
+                description="Settings for the graph enrichment process.",
+            ),
         ) -> WrappedDeleteResponse:
             collection_uuid = UUID(collection_id)
             document_uuid = UUID(document_id)
@@ -667,9 +710,36 @@ class ManagementRouter(BaseRouter):
                     403,
                 )
 
-            await self.service.remove_document_from_collection(
+            enrichment = await self.service.remove_document_from_collection(
                 document_uuid, collection_uuid
             )
+            if enrichment:
+                if not run_type:
+                    run_type = KGRunType.ESTIMATE
+
+                server_kg_enrichment_settings = (
+                    self.service.providers.kg.config.kg_enrichment_settings
+                )
+                if run_type is KGRunType.ESTIMATE:
+
+                    return await self.service.providers.kg.get_enrichment_estimate(
+                        collection_id, server_kg_enrichment_settings
+                    )
+
+                if kg_enrichment_settings:
+                    for key, value in kg_enrichment_settings.items():
+                        if value is not None:
+                            setattr(server_kg_enrichment_settings, key, value)
+
+                workflow_input = {
+                    "collection_id": str(collection_id),
+                    "kg_enrichment_settings": server_kg_enrichment_settings.model_dump_json(),
+                    "user": auth_user.json(),
+                }
+                await self.orchestration_provider.run_workflow(
+                    "enrich-graph", {"request": workflow_input}, {}
+                )
+
             return None  # type: ignore
 
         @self.router.get("/document_collections/{document_id}")
@@ -724,3 +794,127 @@ class ManagementRouter(BaseRouter):
                     "total_entries"
                 ]
             }
+
+        @self.router.get("/conversations_overview")
+        @self.base_endpoint
+        async def conversations_overview_app(
+            conversation_ids: list[str] = Query([]),
+            offset: int = Query(0, ge=0),
+            limit: int = Query(100, ge=1, le=1000),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> WrappedConversationsOverviewResponse:
+            conversation_uuids = [
+                UUID(conversation_id) for conversation_id in conversation_ids
+            ]
+            conversations_overview_response = (
+                await self.service.conversations_overview(
+                    conversation_ids=conversation_uuids,
+                    offset=offset,
+                    limit=limit,
+                )
+            )
+
+            return conversations_overview_response["results"], {  # type: ignore
+                "total_entries": conversations_overview_response[
+                    "total_entries"
+                ]
+            }
+
+        @self.router.get("/get_conversation/{conversation_id}")
+        @self.base_endpoint
+        async def get_conversation(
+            conversation_id: str = Path(..., description="Conversation ID"),
+            branch_id: str = Query(None, description="Branch ID"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> WrappedConversationResponse:
+            result = await self.service.get_conversation(
+                conversation_id,
+                branch_id,
+            )
+            return result
+
+        @self.router.post("/create_conversation")
+        @self.base_endpoint
+        async def create_conversation(
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> dict:
+            return await self.service.create_conversation()
+
+        @self.router.post("/add_message/{conversation_id}")
+        @self.base_endpoint
+        async def add_message(
+            conversation_id: str = Path(..., description="Conversation ID"),
+            message: Message = Body(..., description="Message content"),
+            parent_id: Optional[str] = Body(
+                None, description="Parent message ID"
+            ),
+            metadata: Optional[dict] = Body(None, description="Metadata"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> dict:
+            message_id = await self.service.add_message(
+                conversation_id, message, parent_id, metadata
+            )
+            return {"message_id": message_id}
+
+        @self.router.put("/update_message/{message_id}")
+        @self.base_endpoint
+        async def edit_message(
+            message_id: str = Path(..., description="Message ID"),
+            message: str = Body(..., description="New content"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> dict:
+            new_message_id, new_branch_id = await self.service.edit_message(
+                message_id, message
+            )
+            return {
+                "new_message_id": new_message_id,
+                "new_branch_id": new_branch_id,
+            }
+
+        @self.router.get("/branches_overview/{conversation_id}")
+        @self.base_endpoint
+        async def branches_overview(
+            conversation_id: str = Path(..., description="Conversation ID"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> dict:
+            branches = await self.service.branches_overview(conversation_id)
+            return {"branches": branches}
+
+        # TODO: Publish this endpoint once more testing is done
+        # @self.router.get("/get_next_branch/{branch_id}")
+        # @self.base_endpoint
+        # async def get_next_branch(
+        #     branch_id: str = Path(..., description="Current branch ID"),
+        #     auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        # ) -> dict:
+        #     next_branch_id = await self.service.get_next_branch(branch_id)
+        #     return {"next_branch_id": next_branch_id}
+
+        # TODO: Publish this endpoint once more testing is done
+        # @self.router.get("/get_previous_branch/{branch_id}")
+        # @self.base_endpoint
+        # async def get_prev_branch(
+        #     branch_id: str = Path(..., description="Current branch ID"),
+        #     auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        # ) -> dict:
+        #     prev_branch_id = await self.service.get_prev_branch(branch_id)
+        #     return {"prev_branch_id": prev_branch_id}
+
+        # TODO: Publish this endpoint once more testing is done
+        # @self.router.post("/branch_at_message/{message_id}")
+        # @self.base_endpoint
+        # async def branch_at_message(
+        #     message_id: str = Path(..., description="Message ID"),
+        #     auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        # ) -> dict:
+        #     branch_id = await self.service.branch_at_message(message_id)
+        #     return {"branch_id": branch_id}
+
+        @self.router.delete("/delete_conversation/{conversation_id}")
+        @self.base_endpoint
+        async def delete_conversation(
+            conversation_id: str = Path(..., description="Conversation ID"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> WrappedDeleteResponse:
+            await self.service.delete_conversation(conversation_id)
+            return None  # type: ignore

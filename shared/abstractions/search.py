@@ -61,7 +61,6 @@ class KGSearchResultType(str, Enum):
 
 class KGSearchMethod(str, Enum):
     LOCAL = "local"
-    GLOBAL = "global"
 
 
 class KGEntityResult(R2RSerializable):
@@ -206,12 +205,22 @@ class VectorSearchSettings(R2RSerializable):
     )
     filters: dict[str, Any] = Field(
         default_factory=dict,
-        description="Filters to apply to the vector search",
+        description="Alias for search_filters",
         deprecated=True,
     )
     search_filters: dict[str, Any] = Field(
         default_factory=dict,
-        description="Filters to apply to the vector search",
+        description="""Filters to apply to the vector search. Allowed operators include `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in`, and `nin`.
+
+      Commonly seen filters include operations include the following:
+
+        `{"document_id": {"$eq": "9fbe403b-..."}}`
+
+        `{"document_id": {"$in": ["9fbe403b-...", "3e157b3a-..."]}}`
+
+        `{"collection_ids": {"$overlap": ["122fdf6a-...", "..."]}}`
+
+        `{"$and": {"$document_id": ..., "collection_ids": ...}}`""",
     )
     search_limit: int = Field(
         default=10,
@@ -305,12 +314,22 @@ class KGSearchSettings(R2RSerializable):
 
     filters: dict[str, Any] = Field(
         default_factory=dict,
-        description="Filters to apply to the vector search",
+        description="Alias for search_filters",
         deprecated=True,
     )
     search_filters: dict[str, Any] = Field(
         default_factory=dict,
-        description="Filters to apply to the vector search",
+        description="""Filters to apply to the vector search. Allowed operators include `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in`, and `nin`.
+
+      Commonly seen filters include operations include the following:
+
+        `{"document_id": {"$eq": "9fbe403b-..."}}`
+
+        `{"document_id": {"$in": ["9fbe403b-...", "3e157b3a-..."]}}`
+
+        `{"collection_ids": {"$overlap": ["122fdf6a-...", "..."]}}`
+
+        `{"$and": {"$document_id": ..., "collection_ids": ...}}`""",
     )
 
     selected_collection_ids: list[UUID] = Field(
@@ -318,13 +337,13 @@ class KGSearchSettings(R2RSerializable):
         description="Collection IDs to search for",
     )
 
-    graphrag_map_system_prompt: str = Field(
-        default="graphrag_map_system_prompt",
+    graphrag_map_system: str = Field(
+        default="graphrag_map_system",
         description="The system prompt for the graphrag map prompt.",
     )
 
-    graphrag_reduce_system_prompt: str = Field(
-        default="graphrag_reduce_system_prompt",
+    graphrag_reduce_system: str = Field(
+        default="graphrag_reduce_system",
         description="The system prompt for the graphrag reduce prompt.",
     )
 
@@ -357,7 +376,7 @@ class KGSearchSettings(R2RSerializable):
         json_encoders = {UUID: str}
         json_schema_extra = {
             "use_kg_search": True,
-            "kg_search_type": "global",
+            "kg_search_type": "local",
             "kg_search_level": "0",
             "generation_config": GenerationConfig.Config.json_schema_extra,
             "max_community_description_length": 65536,

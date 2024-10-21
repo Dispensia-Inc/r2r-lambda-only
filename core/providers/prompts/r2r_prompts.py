@@ -10,7 +10,7 @@ import yaml
 from core.base import DatabaseProvider, Prompt, PromptConfig, PromptProvider
 from core.base.utils import generate_default_prompt_id
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class R2RPromptProvider(PromptProvider):
@@ -36,10 +36,7 @@ class R2RPromptProvider(PromptProvider):
     async def initialize(self):
         try:
             self.pool = await asyncpg.create_pool(
-                self.db_provider.connection_string,
-                min_size=1,
-                max_size=3,
-                max_inactive_connection_lifetime=10
+                self.db_provider.connection_string
             )
             logger.info(
                 "R2RPromptProvider successfully connected to Postgres database."
@@ -205,6 +202,7 @@ class R2RPromptProvider(PromptProvider):
         input_types: dict[str, str],
         modify_created_at: bool = False,
     ) -> None:
+        logger.info(f"Adding prompt '{name}' to the database.")
         prompt = Prompt(
             prompt_id=generate_default_prompt_id(name),
             name=name,
@@ -221,7 +219,7 @@ class R2RPromptProvider(PromptProvider):
             logger.error(f"Failed to add/update prompt '{name}': {e}")
             raise
 
-    def get_prompt(
+    async def get_prompt(
         self,
         prompt_name: str,
         inputs: Optional[dict[str, Any]] = None,
