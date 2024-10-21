@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -8,7 +9,12 @@ from fastapi import FastAPI
 from mangum import Mangum
 from fastapi.middleware.cors import CORSMiddleware
 
-from ...core.main.assembly import R2RBuilder, R2RConfig
+from core.main.assembly import R2RBuilder, R2RConfig
+from core.base import (
+    DatabaseConfig,
+    CryptoProvider,
+    DatabaseProvider
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,36 @@ async def lifespan(app: FastAPI):
     # # Shutdown
     scheduler.shutdown()
 
+async def custom_create_database_provider(
+    self,
+    db_config: DatabaseConfig,
+    crypto_provider: CryptoProvider,
+) -> DatabaseProvider:
+    database_provider: Optional[DatabaseProvider] = None
+    if not self.config.embedding.base_dimension:
+        raise ValueError(
+            "Embedding config must have a base dimension to initialize database."
+        )
+
+    vector_db_dimension = self.config.embedding.base_dimension
+    quantization_type = (
+        self.config.embedding.quantization_settings.quantization_type
+    )
+    if db_config.provider == "postgres":
+        from src.providers import CustomPostgresDBProvider
+
+        database_provider = CustomPostgresDBProvider(
+            db_config,
+            vector_db_dimension,
+            crypto_provider=crypto_provider,
+            quantization_type=quantization_type,
+        )
+        await database_provider.initialize()
+        return database_provider
+    else:
+        raise ValueError(
+            f"Database provider {db_config.provider} not supported"
+        )
 
 async def create_r2r_app(
     config_name: Optional[str] = "default",
@@ -59,25 +95,25 @@ async def create_r2r_app(
 
     # Build the R2RApp
     builder = R2RBuilder(config=config)
-    builder.with_da
+    # カスタムDBProviderを指定
+    builder.with_provider("database_provider_override", 
+                          await custom_create_database_provider(
+                              db_config=config.database
+                              )
+                          )
     return await builder.build()
 
 
 logging.basicConfig(level=logging.INFO)
 
-config_name = os.getenv("CONFIG_NAME", None)
-config_path = os.getenv("CONFIG_PATH", None)
+config_name = os.getenv("R2R_CONFIG_NAME", os.getenv("CONFIG_NAME", None))
+config_path = os.getenv("R2R_CONFIG_PATH", os.getenv("CONFIG_PATH", None))
+
 if not config_path and not config_name:
     config_name = "default"
-host = os.getenv("HOST", "0.0.0.0")
-port = int(os.getenv("PORT", "7272"))
 
-logger.info(
-    f"Environment CONFIG_NAME: {'None' if config_name is None else config_name}"
-)
-logger.info(
-    f"Environment CONFIG_PATH: {'None' if config_path is None else config_path}"
-)
+host = os.getenv("R2R_HOST", os.getenv("HOST", "0.0.0.0"))
+port = int(os.getenv("R2R_PORT", (os.getenv("PORT", "7272"))))
 
 # Create the FastAPI app
 app = FastAPI(lifespan=lifespan)
