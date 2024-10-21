@@ -4,7 +4,9 @@ from core.base import (
     CryptoProvider,
     DatabaseProvider,
     FileConfig,
-    FileProvider
+    FileProvider,
+    PromptConfig,
+    PromptProvider,
 )
 from core.main import R2RProviderFactory
 from core.main.config import R2RConfig
@@ -65,3 +67,23 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             )
 
         return file_provider
+
+    @staticmethod
+    async def create_prompt_provider(
+        prompt_config: PromptConfig,
+        db_provider: DatabaseProvider,
+        *args,
+        **kwargs,
+    ) -> PromptProvider:
+        prompt_provider = None
+
+        if prompt_config.provider != "r2r":
+            raise ValueError(
+                f"Prompt provider {prompt_config.provider} not supported"
+            )
+        from core.providers import R2RPromptProvider
+
+        prompt_provider = R2RPromptProvider(prompt_config, db_provider)
+        await prompt_provider.initialize()
+
+        return prompt_provider
