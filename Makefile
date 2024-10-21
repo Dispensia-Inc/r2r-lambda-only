@@ -1,5 +1,5 @@
 dev:
-	uvicorn core.main.app_entry:app --env-file .env --port 3000
+	uvicorn src.main.app_entry:app --env-file .env --port 3000
 
 docker-build:
 	docker build -t accelerate/r2r-lambda -f Dockerfile.dev .

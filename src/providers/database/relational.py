@@ -16,7 +16,7 @@ class CustomPostgresRelationalDBProvider(PostgresRelationalDBProvider):
     ):
         super().__init__(
             config=config,
-            setconnection_string=connection_string,
+            connection_string=connection_string,
             crypto_provider=crypto_provider,
             project_name=project_name,
             postgres_configuration_settings=postgres_configuration_settings,

@@ -10,11 +10,7 @@ from mangum import Mangum
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.main.assembly import R2RBuilder, R2RConfig
-from core.base import (
-    DatabaseConfig,
-    CryptoProvider,
-    DatabaseProvider
-)
+from src.main import CustomR2RProviderFactory
 
 logger = logging.getLogger(__name__)
 
@@ -48,36 +44,6 @@ async def lifespan(app: FastAPI):
     # # Shutdown
     scheduler.shutdown()
 
-async def custom_create_database_provider(
-    self,
-    db_config: DatabaseConfig,
-    crypto_provider: CryptoProvider,
-) -> DatabaseProvider:
-    database_provider: Optional[DatabaseProvider] = None
-    if not self.config.embedding.base_dimension:
-        raise ValueError(
-            "Embedding config must have a base dimension to initialize database."
-        )
-
-    vector_db_dimension = self.config.embedding.base_dimension
-    quantization_type = (
-        self.config.embedding.quantization_settings.quantization_type
-    )
-    if db_config.provider == "postgres":
-        from src.providers import CustomPostgresDBProvider
-
-        database_provider = CustomPostgresDBProvider(
-            db_config,
-            vector_db_dimension,
-            crypto_provider=crypto_provider,
-            quantization_type=quantization_type,
-        )
-        await database_provider.initialize()
-        return database_provider
-    else:
-        raise ValueError(
-            f"Database provider {db_config.provider} not supported"
-        )
 
 async def create_r2r_app(
     config_name: Optional[str] = "default",
@@ -95,12 +61,8 @@ async def create_r2r_app(
 
     # Build the R2RApp
     builder = R2RBuilder(config=config)
-    # カスタムDBProviderを指定
-    builder.with_provider("database_provider_override", 
-                          await custom_create_database_provider(
-                              db_config=config.database
-                              )
-                          )
+    # CustomR2RProviderFactoryを指定
+    builder.with_provider_factory(CustomR2RProviderFactory)
     return await builder.build()
 
 
