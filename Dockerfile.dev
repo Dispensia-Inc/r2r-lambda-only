@@ -11,6 +11,7 @@ COPY r2r.toml ./
 COPY pyproject.toml ./
 COPY core/ ./core/
 COPY shared/ ./shared/
+COPY src/ ./src/
 
 # タイムゾーンの設定
 RUN ln -sf  /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
@@ -20,4 +21,4 @@ RUN pip install -r requirements.txt
 
 # ENTRYPOINT ["/bin/sh", "-c", "while :; do sleep 200; done"]
 # CMD ["core.main.app_entry:app", "--host", "0.0.0.0", "--port", "8080"]
-CMD ["core.main.app_entry.handler"]
+CMD ["src.main.app_entry.handler"]
