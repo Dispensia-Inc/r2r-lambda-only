@@ -38,6 +38,11 @@ python -m venv accelerate-workspace
 . accelerate-worksprace/bin/activate
 ```
 
+- 仮想環境から出る
+```bash
+deactivate
+```
+
 - モジュールのインストール
 
 ```bash
