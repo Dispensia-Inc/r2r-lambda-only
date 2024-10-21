@@ -1,8 +1,10 @@
-from typing import Optional
+from typing import Optional, Any
 from core.base import (
     DatabaseConfig,
     CryptoProvider,
-    DatabaseProvider
+    DatabaseProvider,
+    FileConfig,
+    FileProvider
 )
 from core.main import R2RProviderFactory
 from core.main.config import R2RConfig
@@ -44,3 +46,22 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             raise ValueError(
                 f"Database provider {db_config.provider} not supported"
             )
+
+    @staticmethod
+    async def create_file_provider(
+        file_config: FileConfig,
+        db_provider: Any,
+        *args,
+        **kwargs,
+    ) -> FileProvider:
+        file_provider: Optional[FileProvider] = None
+        if file_config.provider == "postgres":
+            from src.providers.file.postgres import CustomPostgresFileProvider
+            file_provider = CustomPostgresFileProvider(file_config, db_provider)
+            await file_provider.initialize()
+        else:
+            raise ValueError(
+                f"File provider {file_config.provider} not supported."
+            )
+
+        return file_provider
