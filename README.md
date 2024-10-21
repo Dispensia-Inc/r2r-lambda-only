@@ -94,6 +94,10 @@ curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations"
 make build
 ```
 
+```bash
+make deploy
+```
+
 - 次の手順は以下のページで確認
 - [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b#aws%E3%81%B8%E3%81%AE%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4)
 
