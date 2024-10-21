@@ -1,6 +1,5 @@
 import logging
 import os
-import warnings
 from contextlib import asynccontextmanager
 from typing import Optional
 

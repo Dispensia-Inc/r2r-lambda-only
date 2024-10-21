@@ -32,7 +32,10 @@ class CustomPostgresRelationalDBProvider(PostgresRelationalDBProvider):
             )
 
             logger.info(
-                "Successfully connected to Postgres database and created connection pool."
+                "custom - Successfully connected to Postgres database and created connection pool."
+            )
+            logger.info(
+                f"custom - max_size={self.postgres_configuration_settings.max_connections}"
             )
         except Exception as e:
             raise ValueError(

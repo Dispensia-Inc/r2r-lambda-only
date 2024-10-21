@@ -27,9 +27,11 @@ class CustomPostgresFileProvider(PostgresFileProvider):
             max_inactive_connection_lifetime=10
         )
         logger.info(
-            "File provider successfully connected to Postgres database."
+            "custom - File provider successfully connected to Postgres database."
         )
-
+        logger.info(
+            f"custom - max_size={self.db_provider.postgres_configuration_settings.max_connections}"
+        )
         async with self.pool.acquire() as conn:
             await conn.execute('CREATE EXTENSION IF NOT EXISTS "lo";')
 

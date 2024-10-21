@@ -1,13 +1,17 @@
 import logging
 import asyncpg
 
-from core.providers.prompts.r2r_prompts import PromptProvider
+from core.base import DatabaseProvider, PromptConfig
+from core.providers.prompts.r2r_prompts import R2RPromptProvider
 
 logger = logging.getLogger()
 
-class CustomR2RPromptProvider(PromptProvider):
-    def __init__(self, config):
-        super().__init__(config)
+class CustomR2RPromptProvider(R2RPromptProvider):
+    def __init__(self, config: PromptConfig,  db_provider: DatabaseProvider):
+        super().__init__(
+            config=config,
+            db_provider=db_provider
+        )
     
     async def initialize(self):
         try:
@@ -18,9 +22,11 @@ class CustomR2RPromptProvider(PromptProvider):
                 max_inactive_connection_lifetime=10
             )
             logger.info(
-                "R2RPromptProvider successfully connected to Postgres database."
+                "custom - R2RPromptProvider successfully connected to Postgres database."
             )
-
+            logger.info(
+                f"custom - max_size={self.db_provider.postgres_configuration_settings.max_connections}"
+            )
             async with self.pool.acquire() as conn:
                 await conn.execute('CREATE EXTENSION IF NOT EXISTS "lo";')
 

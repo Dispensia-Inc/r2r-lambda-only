@@ -81,9 +81,9 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             raise ValueError(
                 f"Prompt provider {prompt_config.provider} not supported"
             )
-        from core.providers import R2RPromptProvider
+        from src.providers.prompts.r2r_prompts import CustomR2RPromptProvider
 
-        prompt_provider = R2RPromptProvider(prompt_config, db_provider)
+        prompt_provider = CustomR2RPromptProvider(prompt_config, db_provider)
         await prompt_provider.initialize()
 
         return prompt_provider
