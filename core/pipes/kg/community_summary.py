@@ -1,7 +1,7 @@
-import random
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Any, AsyncGenerator, Optional
 from uuid import UUID
@@ -18,7 +18,6 @@ from core.base import (
     PromptProvider,
     R2RLoggingProvider,
 )
-
 from shared.abstractions.graph import Entity, Triple
 
 logger = logging.getLogger()
@@ -146,7 +145,8 @@ class KGCommunitySummaryPipe(AsyncPipe):
 
         community_level, entities, triples = (
             await self.kg_provider.get_community_details(
-                community_number=community_number
+                community_number=community_number,
+                collection_id=collection_id,
             )
         )
 

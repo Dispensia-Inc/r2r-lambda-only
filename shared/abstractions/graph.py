@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Optional, Union
 from uuid import UUID
 
@@ -43,6 +44,15 @@ class RelationshipType(R2RSerializable):
     description: str | None = None
 
 
+class EntityLevel(str, Enum):
+    COLLECTION = "collection"
+    DOCUMENT = "document"
+    CHUNK = "chunk"
+
+    def __str__(self):
+        return self.value
+
+
 class Entity(R2RSerializable):
     """An entity extracted from a document."""
 
@@ -50,11 +60,12 @@ class Entity(R2RSerializable):
     id: Optional[int] = None
     category: Optional[str] = None
     description: Optional[str] = None
-    description_embedding: Optional[list[float]] = None
+    description_embedding: Optional[Union[list[float], str]] = None
     community_numbers: Optional[list[str]] = None
     extraction_ids: Optional[list[UUID]] = None
     collection_id: Optional[UUID] = None
     document_id: Optional[UUID] = None
+    document_ids: Optional[list[UUID]] = None
     # we don't use these yet
     # name_embedding: Optional[list[float]] = None
     # graph_embedding: Optional[list[float]] = None
@@ -75,10 +86,9 @@ class Entity(R2RSerializable):
                 self.attributes = json.loads(self.attributes)
             except json.JSONDecodeError:
                 self.attributes = self.attributes
-                pass
 
 
-class Triple(BaseModel):
+class Triple(R2RSerializable):
     """A relationship between two entities. This is a generic relationship, and can be used to represent any type of relationship between any two entities."""
 
     id: Optional[int] = None
@@ -119,7 +129,7 @@ class Triple(BaseModel):
                 self.attributes = self.attributes
 
     @classmethod
-    def from_dict(
+    def from_dict(  # type: ignore
         cls,
         d: dict[str, Any],
         id_key: str = "id",
