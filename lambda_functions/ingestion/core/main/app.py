@@ -1,9 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
+from core.main.config import R2RConfig
 from core.main import IngestionRouter
-
-from .config import R2RConfig
 
 
 class CustomR2RApp:
