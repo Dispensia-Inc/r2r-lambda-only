@@ -1,7 +1,6 @@
 from typing import Any, Optional
 
 from core.base import (
-    AsyncPipe,
     DatabaseConfig,
     CryptoProvider,
     DatabaseProvider,
@@ -18,6 +17,7 @@ from core.main import (
 )
 from core.providers import PostgresKGProvider
 from core.main.abstractions import R2RProviders
+from core.providers import R2RPromptProvider
 
 
 class CustomR2RProviderFactory(R2RProviderFactory):
@@ -101,12 +101,9 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             )
         )
 
-        prompt_provider = (
-            prompt_provider_override
-            or await self.create_prompt_provider(
-                self.config.prompt, database_provider, *args, **kwargs
-            )
-        )
+        # prompt_providerは使わないのでインスタンス化のみ（初期化は実行しない）
+        prompt_provider = R2RPromptProvider(
+            self.config.prompt, database_provider)
 
         # PostgresKGProviderをインスタンス化
         kg_provider = PostgresKGProvider(
