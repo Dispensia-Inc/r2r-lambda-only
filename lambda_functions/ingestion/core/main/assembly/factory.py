@@ -18,9 +18,8 @@ from core.main import (
     R2RPipeFactory,
     R2RProviderFactory,
 )
-from core.main.abstractions import R2RProviders
+from core.main.abstractions import R2RProviders, R2RPipes
 
-from ..abstractions import CustomR2RPipes
 
 class CustomR2RProviderFactory(R2RProviderFactory):
     def __init__(self, config: R2RConfig):
@@ -147,7 +146,7 @@ class CustomR2RProviderFactory(R2RProviderFactory):
 
 # parsing_pipe, embedding_pipe, vector_storage_pipeだけを使う
 class CustomR2RPipeFactory(R2RPipeFactory):
-    def __init__(self, config: R2RConfig, providers: CustomR2RProviders):
+    def __init__(self, config: R2RConfig, providers: R2RProviders):
         self.config = config
         self.providers = providers
 
@@ -158,8 +157,8 @@ class CustomR2RPipeFactory(R2RPipeFactory):
         vector_storage_pipe_override: Optional[AsyncPipe] = None,
         *args,
         **kwargs,
-    ) -> CustomR2RPipes:
-        return CustomR2RPipes(
+    ) -> R2RPipes:
+        return R2RPipes(
             parsing_pipe=parsing_pipe_override
             or self.create_parsing_pipe(
                 self.config.ingestion.excluded_parsers,
