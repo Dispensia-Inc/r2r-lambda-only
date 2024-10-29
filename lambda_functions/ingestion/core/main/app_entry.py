@@ -8,11 +8,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from mangum import Mangum
 from fastapi.middleware.cors import CORSMiddleware
-
-from .assembly.builder import CustomR2RBuilder
 from core.main.assembly import R2RConfig
 
-from ..main.assembly.factory import CustomR2RProviderFactory, CustomR2RPipeFactory
+from .assembly.builder import CustomR2RBuilder
+from ..main.assembly.factory import CustomR2RProviderFactory
 
 logger = logging.getLogger()
 
@@ -62,8 +61,6 @@ async def create_r2r_app(
     builder = CustomR2RBuilder(config=config)
     # R2RProviderFactoryの上書き
     builder.with_provider_factory(CustomR2RProviderFactory)
-    # R2RPipeFactoryの上書き
-    builder.with_pipe_factory(CustomR2RPipeFactory)
     return await builder.build()
 
 

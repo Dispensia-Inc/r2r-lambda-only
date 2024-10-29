@@ -11,14 +11,13 @@ from core.base import (
     FileProvider,
     IngestionProvider,
     PromptProvider,
-    KGProvider,
 )
 from core.main.config import R2RConfig
 from core.main import (
-    R2RPipeFactory,
     R2RProviderFactory,
 )
-from core.main.abstractions import R2RProviders, R2RPipes
+from core.providers import PostgresKGProvider
+from core.main.abstractions import R2RProviders
 
 
 class CustomR2RProviderFactory(R2RProviderFactory):
@@ -109,8 +108,12 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             )
         )
 
-        # 空のインスタンス生成
-        kg_provider = KGProvider(self.config.kg)
+        # PostgresKGProviderをインスタンス化
+        kg_provider = PostgresKGProvider(
+            self.config.kg,
+            database_provider,
+            embedding_provider
+        )
 
         auth_provider = (
             auth_provider_override

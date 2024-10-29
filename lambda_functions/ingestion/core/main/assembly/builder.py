@@ -91,6 +91,5 @@ class CustomR2RBuilder(R2RBuilder):
 
         return CustomR2RApp(
             config=self.config,
-            orchestration_provider=orchestration_provider,
             **routers,
         )
