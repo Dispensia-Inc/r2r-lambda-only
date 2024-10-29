@@ -1,31 +1,23 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from core.main import IngestionRouter
 
 from .config import R2RConfig
 
-class R2RApp:
+
+class CustomR2RApp:
     def __init__(
         self,
         config: R2RConfig,
-        orchestration_provider: OrchestrationProvider,
-        auth_router: AuthRouter,
         ingestion_router: IngestionRouter,
-        management_router: ManagementRouter,
-        retrieval_router: RetrievalRouter,
-        kg_router: KGRouter,
     ):
         self.config = config
         self.ingestion_router = ingestion_router
-        self.management_router = management_router
-        self.retrieval_router = retrieval_router
-        self.auth_router = auth_router
-        self.kg_router = kg_router
-        self.orchestration_provider = orchestration_provider
         self.app = FastAPI()
         self._setup_routes()
         self._apply_cors()
-    
+
     def _setup_routes(self):
         # Include routers in the app
         self.app.include_router(self.ingestion_router, prefix="/v2")

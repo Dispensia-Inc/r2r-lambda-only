@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .assembly.builder import CustomR2RBuilder
 from core.main.assembly import R2RConfig
 
+from ..main.assembly.factory import CustomR2RProviderFactory, CustomR2RPipeFactory
+
 logger = logging.getLogger()
 
 # Global scheduler
@@ -58,6 +60,10 @@ async def create_r2r_app(
 
     # Build the R2RApp
     builder = CustomR2RBuilder(config=config)
+    # R2RProviderFactoryの上書き
+    builder.with_provider_factory(CustomR2RProviderFactory)
+    # R2RPipeFactoryの上書き
+    builder.with_pipe_factory(CustomR2RPipeFactory)
     return await builder.build()
 
 
@@ -92,10 +98,12 @@ if os.getenv("PORT"):
     )
 
 logger.info(
-    f"Environment R2R_CONFIG_NAME: {'None' if config_name is None else config_name}"
+    f"Environment R2R_CONFIG_NAME: {
+        'None' if config_name is None else config_name}"
 )
 logger.info(
-    f"Environment R2R_CONFIG_PATH: {'None' if config_path is None else config_path}"
+    f"Environment R2R_CONFIG_PATH: {
+        'None' if config_path is None else config_path}"
 )
 logger.info(f"Environment R2R_PROJECT_NAME: {os.getenv('R2R_PROJECT_NAME')}")
 

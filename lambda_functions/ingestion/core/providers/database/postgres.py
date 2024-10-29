@@ -1,5 +1,11 @@
 import logging
+from typing import Optional
 
+from core.base import (
+    CryptoProvider,
+    DatabaseConfig,
+    VectorQuantizationType,
+)
 from core.providers.database.postgres import PostgresDBProvider
 from .base import CustomSemaphoreConnectionPool
 
@@ -7,8 +13,25 @@ logger = logging.getLogger()
 
 
 class CustomPostgresDBProvider(PostgresDBProvider):
-    def __init__(self):
-        super().__init__()
+    def __init__(
+        self,
+        config: DatabaseConfig,
+        dimension: int,
+        crypto_provider: CryptoProvider,
+        quantization_type: Optional[
+            VectorQuantizationType
+        ] = VectorQuantizationType.FP32,
+        *args,
+        **kwargs,
+        ):
+        super().__init__(
+            config, 
+            dimension, 
+            crypto_provider, 
+            quantization_type, 
+            *args, 
+            **kwargs
+            )
 
     async def initialize(self):
         logger.info("Initializing `PostgresDBProvider`.")

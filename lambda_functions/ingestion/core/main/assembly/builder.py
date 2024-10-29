@@ -1,16 +1,21 @@
 import logging
+from typing import Any, Dict
 
 from core.base import (
+    AsyncPipe,
     R2RLoggingProvider,
     RunManager,
 )
 from core.main import (
-    R2RApp,
     R2RBuilder,
     R2RConfig,
     IngestionRouter,
+    IngestionService,
+    R2RPipeFactory,
 )
-from .factory import CustomR2RProviderFactory, CustomR2RPipeFactory
+
+from ...main.app import CustomR2RApp
+from .factory import CustomR2RProviderFactory
 
 
 logger = logging.getLogger()
@@ -20,9 +25,34 @@ class CustomR2RBuilder(R2RBuilder):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
 
-    async def build(self, *args, **kwargs) -> R2RApp:
+    def _create_services(
+        self, service_params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        services = {}
+        # IngestionServiceだけインスタンス化する
+        services["ingestion"] = IngestionService(**service_params)
+        return services
+
+    async def build(self, *args, **kwargs) -> CustomR2RApp:
         provider_factory = self.provider_factory_override or CustomR2RProviderFactory
-        pipe_factory = self.pipe_factory_override or CustomR2RPipeFactory
+        pipe_factory = self.pipe_factory_override or R2RPipeFactory
+
+        # 除外するパイプのオーバーライドに空のインスタンスを渡す
+        kwargs = {
+            "kg_triples_extraction_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_storage_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "vector_search_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_search_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "rag_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "streaming_rag_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_entity_description_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_clustering_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_entity_deduplication_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_entity_deduplication_summary_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_community_summary_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            "kg_prompt_tuning_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
+            **kwargs
+        }
 
         try:
             providers = await self._create_providers(
@@ -53,17 +83,13 @@ class CustomR2RBuilder(R2RBuilder):
         orchestration_provider = providers.orchestration
 
         routers = {
-            "auth_router": None,
             "ingestion_router": IngestionRouter(
                 services["ingestion"],
                 orchestration_provider=orchestration_provider,
             ).get_router(),
-            "management_router": None,
-            "retrieval_router": None,
-            "kg_router": None,
         }
 
-        return R2RApp(
+        return CustomR2RApp(
             config=self.config,
             orchestration_provider=orchestration_provider,
             **routers,
