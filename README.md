@@ -96,7 +96,7 @@ pip install tuna
 ```
 
 ```bash
-python -X importtime main.py 2> prof.txt
+python -X importtime test.py 2> prof.txt
 ```
 
 ```bash
