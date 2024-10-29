@@ -9,7 +9,8 @@ from fastapi import FastAPI
 from mangum import Mangum
 from fastapi.middleware.cors import CORSMiddleware
 
-from .assembly import R2RBuilder, R2RConfig
+from .assembly.builder import CustomR2RBuilder
+from core.main.assembly import R2RConfig
 
 logger = logging.getLogger()
 
@@ -56,7 +57,7 @@ async def create_r2r_app(
         )
 
     # Build the R2RApp
-    builder = R2RBuilder(config=config)
+    builder = CustomR2RBuilder(config=config)
     return await builder.build()
 
 
