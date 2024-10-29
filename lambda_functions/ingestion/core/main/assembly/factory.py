@@ -11,16 +11,20 @@ from core.base import (
     FileProvider,
     IngestionProvider,
     PromptProvider,
+    KGProvider,
 )
 from core.main.config import R2RConfig
-from core.main.abstractions import R2RPipes, R2RProviders
 from core.main import (
-    R2RPipeFactory
+    R2RPipeFactory,
+    R2RProviderFactory,
 )
+from core.main.abstractions import R2RProviders
 
-class CustomR2RProviderFactory:
+from ..abstractions import CustomR2RPipes
+
+class CustomR2RProviderFactory(R2RProviderFactory):
     def __init__(self, config: R2RConfig):
-        self.config = config
+        super().__init__(config)
 
     async def create_database_provider(
         self,
@@ -106,6 +110,9 @@ class CustomR2RProviderFactory:
             )
         )
 
+        # 空のインスタンス生成
+        kg_provider = KGProvider(self.config.kg)
+
         auth_provider = (
             auth_provider_override
             or await self.create_auth_provider(
@@ -133,14 +140,14 @@ class CustomR2RProviderFactory:
             ingestion=ingestion_provider,
             llm=llm_provider,
             prompt=prompt_provider,
-            kg=None,
+            kg=kg_provider,
             orchestration=orchestration_provider,
             file=file_provider,
         )
 
 # parsing_pipe, embedding_pipe, vector_storage_pipeだけを使う
 class CustomR2RPipeFactory(R2RPipeFactory):
-    def __init__(self, config: R2RConfig, providers: R2RProviders):
+    def __init__(self, config: R2RConfig, providers: CustomR2RProviders):
         self.config = config
         self.providers = providers
 
@@ -151,8 +158,8 @@ class CustomR2RPipeFactory(R2RPipeFactory):
         vector_storage_pipe_override: Optional[AsyncPipe] = None,
         *args,
         **kwargs,
-    ) -> R2RPipes:
-        return R2RPipes(
+    ) -> CustomR2RPipes:
+        return CustomR2RPipes(
             parsing_pipe=parsing_pipe_override
             or self.create_parsing_pipe(
                 self.config.ingestion.excluded_parsers,

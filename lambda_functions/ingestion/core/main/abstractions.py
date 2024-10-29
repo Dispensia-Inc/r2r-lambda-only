@@ -1,29 +1,20 @@
-from pydantic import BaseModel
-
-from lambda_functions.ingestion.core.base import (
-    AsyncPipe,
-)
+from core.main.abstractions import R2RProviders, R2RPipes
+from core.base.pipes import AsyncPipe
 
 
-# TODO: R2RProviders不要部分の削除
-class R2RProviders(BaseModel):
-    auth: AuthProvider
-    database: DatabaseProvider
-    ingestion: IngestionProvider
-    embedding: EmbeddingProvider
-    file: FileProvider
-    llm: CompletionProvider
-    orchestration: OrchestrationProvider
-    prompt: PromptProvider
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-class R2RPipes(BaseModel):
-    parsing_pipe: AsyncPipe
-    embedding_pipe: AsyncPipe
-    vector_storage_pipe: AsyncPipe
-
-    class Config:
-        arbitrary_types_allowed = True
+class CustomR2RPipes(R2RPipes):
+    parsing_pipe: AsyncPipe | None
+    embedding_pipe: AsyncPipe | None
+    kg_search_pipe: AsyncPipe | None
+    kg_triples_extraction_pipe: AsyncPipe | None
+    kg_storage_pipe: AsyncPipe | None
+    kg_entity_description_pipe: AsyncPipe | None
+    kg_clustering_pipe: AsyncPipe | None
+    kg_entity_deduplication_pipe: AsyncPipe | None
+    kg_entity_deduplication_summary_pipe: AsyncPipe | None
+    kg_community_summary_pipe: AsyncPipe | None
+    kg_prompt_tuning_pipe: AsyncPipe | None
+    rag_pipe: AsyncPipe | None
+    streaming_rag_pipe: AsyncPipe | None
+    vector_storage_pipe: AsyncPipe | None
+    vector_search_pipe: AsyncPipe | None
