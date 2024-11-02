@@ -1,5 +1,8 @@
 import logging
-from typing import Any, Dict
+from typing import Optional, Any, Dict
+from pydantic import Json
+from fastapi import UploadFile
+from uuid import UUID
 
 from core.base import (
     AsyncPipe,
@@ -14,8 +17,8 @@ from core.main import (
     R2RPipeFactory,
 )
 
-from ...main.app import CustomR2RApp
 from .factory import CustomR2RProviderFactory
+from ..orchestration.lambda_orchestration import LambdaOrchestration
 
 
 logger = logging.getLogger()
@@ -33,7 +36,16 @@ class CustomR2RBuilder(R2RBuilder):
         services["ingestion"] = IngestionService(**service_params)
         return services
 
-    async def build(self, *args, **kwargs) -> CustomR2RApp:
+    async def build(
+        self,
+        *args,
+        files: list[UploadFile],
+        document_ids: Optional[Json[list[UUID]]],
+        metadatas: Optional[Json[list[dict]]],
+        ingestion_config: Optional[Json[dict]],
+        token="",
+        **kwargs
+    ):
         provider_factory = self.provider_factory_override or CustomR2RProviderFactory
         pipe_factory = self.pipe_factory_override or R2RPipeFactory
 
@@ -70,7 +82,7 @@ class CustomR2RBuilder(R2RBuilder):
 
         service_params = {
             "config": self.config,
-            "providers": providers,
+            "providers": providers,  # TODO: providersのorchestrationProviderはいらない？
             "pipes": pipes,
             "pipelines": None,
             "agents": None,
@@ -80,16 +92,7 @@ class CustomR2RBuilder(R2RBuilder):
 
         services = self._create_services(service_params)
 
-        orchestration_provider = providers.orchestration
+        lambda_orchestration = LambdaOrchestration(services["ingestion"])
 
-        routers = {
-            "ingestion_router": IngestionRouter(
-                services["ingestion"],
-                orchestration_provider=orchestration_provider,
-            ).get_router(),
-        }
-
-        return CustomR2RApp(
-            config=self.config,
-            **routers,
-        )
+        return lambda_orchestration.run(
+            files, document_ids, metadatas, ingestion_config, token)
