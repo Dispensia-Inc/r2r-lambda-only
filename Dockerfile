@@ -11,6 +11,7 @@ COPY r2r.toml ./
 COPY pyproject.toml ./
 COPY core/ ./core/
 COPY shared/ ./shared/
+COPY src/ ./src/
 
 # タイムゾーンの設定
 RUN ln -sf  /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
