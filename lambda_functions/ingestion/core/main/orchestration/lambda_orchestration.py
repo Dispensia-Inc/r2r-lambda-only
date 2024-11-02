@@ -33,6 +33,7 @@ class LambdaOrchestration:
 
     async def ingest_files_app(
         self,
+        # TODO: FastAPIからじゃなくて引数から直接指定する
         files: list[UploadFile] = File(),
         document_ids: Optional[Json[list[UUID]]] = Form(None),
         metadatas: Optional[Json[list[dict]]] = Form(None),
@@ -83,6 +84,7 @@ class LambdaOrchestration:
             }
 
             file_name = file_data["filename"]
+            # ファイルをDBに保存する
             await self.service.providers.file.store_file(
                 document_id,
                 file_name,
@@ -94,11 +96,12 @@ class LambdaOrchestration:
                 f"Running ingestion without orchestration for file {
                     file_name} and document_id {document_id}."
             )
-            # TODO - Clean up implementation logic here to be more explicitly `synchronous`
+
             from core.main.orchestration import (
                 simple_ingestion_factory,
             )
 
+            # ベクトルデータをDBに保存？
             simple_ingestor = simple_ingestion_factory(self.service)
             await simple_ingestor["ingest-files"](workflow_input)
             messages.append(
@@ -176,7 +179,7 @@ class LambdaOrchestration:
         }
 
         logger.info("Running update without orchestration.")
-        # TODO - Clean up implementation logic here to be more explicitly `synchronous`
+
         from core.main.orchestration import simple_ingestion_factory
 
         simple_ingestor = simple_ingestion_factory(self.service)
@@ -197,6 +200,7 @@ class LambdaOrchestration:
             file_datas.append(
                 {
                     "filename": file.filename,
+                    # contentはbyte型
                     "content": base64.b64encode(content).decode("utf-8"),
                     "content_type": file.content_type,
                 }

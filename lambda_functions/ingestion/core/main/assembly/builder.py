@@ -12,14 +12,14 @@ from core.base import (
 from core.main import (
     R2RBuilder,
     R2RConfig,
-    IngestionRouter,
     IngestionService,
     R2RPipeFactory,
+    IngestionRouter,
 )
 
 from .factory import CustomR2RProviderFactory
 from ..orchestration.lambda_orchestration import LambdaOrchestration
-
+from ..app import CustomR2RApp
 
 logger = logging.getLogger()
 
@@ -39,11 +39,6 @@ class CustomR2RBuilder(R2RBuilder):
     async def build(
         self,
         *args,
-        files: list[UploadFile],
-        document_ids: Optional[Json[list[UUID]]],
-        metadatas: Optional[Json[list[dict]]],
-        ingestion_config: Optional[Json[dict]],
-        token="",
         **kwargs
     ):
         provider_factory = self.provider_factory_override or CustomR2RProviderFactory
@@ -92,7 +87,17 @@ class CustomR2RBuilder(R2RBuilder):
 
         services = self._create_services(service_params)
 
-        lambda_orchestration = LambdaOrchestration(services["ingestion"])
+        orchestration_provider = providers.orchestration
 
-        return lambda_orchestration.run(
-            files, document_ids, metadatas, ingestion_config, token)
+        routers = {
+            "ingestion_router": IngestionRouter(
+                services["ingestion"],
+                orchestration_provider=orchestration_provider,
+            ).get_router(),
+        }
+
+        return CustomR2RApp(
+            config=self.config,
+            orchestration_provider=orchestration_provider,
+            **routers,
+        )
