@@ -61,7 +61,7 @@ async def create_r2r_app(
     # Build the R2RApp
     builder = R2RBuilder(config=config)
     # CustomR2RProviderFactoryを指定
-    # builder.with_provider_factory(CustomR2RProviderFactory)
+    builder.with_provider_factory(CustomR2RProviderFactory)
     return await builder.build()
 
 
