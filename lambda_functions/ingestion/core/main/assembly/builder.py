@@ -1,8 +1,5 @@
 import logging
-from typing import Optional, Any, Dict
-from pydantic import Json
-from fastapi import UploadFile
-from uuid import UUID
+from typing import Any, Dict
 
 from core.base import (
     AsyncPipe,
@@ -18,7 +15,6 @@ from core.main import (
 )
 
 from .factory import CustomR2RProviderFactory
-from ..orchestration.lambda_orchestration import LambdaOrchestration
 from ..app import CustomR2RApp
 
 logger = logging.getLogger()
@@ -98,6 +94,5 @@ class CustomR2RBuilder(R2RBuilder):
 
         return CustomR2RApp(
             config=self.config,
-            orchestration_provider=orchestration_provider,
             **routers,
         )
