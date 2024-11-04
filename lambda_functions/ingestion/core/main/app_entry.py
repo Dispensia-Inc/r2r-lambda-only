@@ -1,4 +1,8 @@
 import logging
+logger = logging.getLogger()
+
+logger.info("---starte program---")
+
 import os
 import warnings
 from contextlib import asynccontextmanager
@@ -13,14 +17,15 @@ from core.main.assembly import R2RConfig
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
 
-logger = logging.getLogger()
 
 # Global scheduler
 scheduler = AsyncIOScheduler()
 
+logger.info("---completed load modules---")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("---called lifespan method---")
     # Startup
     r2r_app = await create_r2r_app(
         config_name=config_name,
