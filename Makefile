@@ -5,10 +5,10 @@ dev-ingestion:
 	uvicorn lambda_functions.ingestion.core.main.app_entry:app --env-file .env --port 3000
 
 docker-build-ingestion:
-	docker build --platform linux/arm64 -t accelerate/lambda-ingestion -f Dockerfile.ingestion .
+	docker build --platform linux/arm64 -t accelerate/r2r-lambda-ingestion -f Dockerfile.ingestion .
 
 docker-run-ingestion:
-	docker run --env-file .env -p 9000:8080 accelerate/lambda-ingestion
+	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda-ingestion
 
 docker-build:
 	docker build --platform linux/arm64 -t accelerate/r2r-lambda -f Dockerfile.dev .
