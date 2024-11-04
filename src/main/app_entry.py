@@ -89,4 +89,5 @@ app.add_middleware(
 )
 
 # export port 8080
-handler = Mangum(app)
+api_gateway_base_path = "/api"
+handler = Mangum(app, api_gateway_base_path=api_gateway_base_path)

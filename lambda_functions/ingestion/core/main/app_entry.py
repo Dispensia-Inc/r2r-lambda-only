@@ -1,4 +1,8 @@
 import logging
+logger = logging.getLogger()
+
+logger.info("---starte program---")
+
 import os
 import warnings
 from contextlib import asynccontextmanager
@@ -13,14 +17,15 @@ from core.main.assembly import R2RConfig
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
 
-logger = logging.getLogger()
 
 # Global scheduler
 scheduler = AsyncIOScheduler()
 
+logger.info("---completed load modules---")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("---called lifespan method---")
     # Startup
     r2r_app = await create_r2r_app(
         config_name=config_name,
@@ -128,5 +133,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -------------test-----------------
+
+
+class CustomMangum(Mangum):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def set_environment(event):
+        logger.info("[[ INFO ]] received invoke handler!")
+        identification_name = event["headers"]["x-acc-identification-name"]
+        # TODO: ここのidentification_nameで無限にDBスキーマが生成できるのでバリデーションを行う
+        os.environ["R2R_PROJECT_NAME"] = identification_name
+        logger.info(f"[[ INFO ]] identification_name = {identification_name}")
+
+    def __call__(self, event, context):
+        self.set_environment(event)
+        super().__call__(event, context)
+# -------------test-----------------
+
+
 # export port 8080
-handler = Mangum(app)
+api_gateway_base_path = "/api/ingestion"
+handler = CustomMangum(app=app, api_gateway_base_path=api_gateway_base_path)

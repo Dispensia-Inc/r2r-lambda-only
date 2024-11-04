@@ -9,14 +9,13 @@ from core.base import (
 from core.main import (
     R2RBuilder,
     R2RConfig,
-    IngestionRouter,
     IngestionService,
     R2RPipeFactory,
+    IngestionRouter,
 )
 
-from ...main.app import CustomR2RApp
 from .factory import CustomR2RProviderFactory
-
+from ..app import CustomR2RApp
 
 logger = logging.getLogger()
 
@@ -33,7 +32,11 @@ class CustomR2RBuilder(R2RBuilder):
         services["ingestion"] = IngestionService(**service_params)
         return services
 
-    async def build(self, *args, **kwargs) -> CustomR2RApp:
+    async def build(
+        self,
+        *args,
+        **kwargs
+    ):
         provider_factory = self.provider_factory_override or CustomR2RProviderFactory
         pipe_factory = self.pipe_factory_override or R2RPipeFactory
 
@@ -70,7 +73,7 @@ class CustomR2RBuilder(R2RBuilder):
 
         service_params = {
             "config": self.config,
-            "providers": providers,
+            "providers": providers,  # TODO: providersのorchestrationProviderはいらない？
             "pipes": pipes,
             "pipelines": None,
             "agents": None,
