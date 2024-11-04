@@ -128,5 +128,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -------------test-----------------
+
+
+class CustomMangum(Mangum):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def set_environment(event):
+        logger.info("[[ INFO ]] received invoke handler!")
+        os.environ["R2R_PROJECT_NAME"] = "r2r_accelerate"
+        logger.info(event)
+
+    def __call__(self, event, context):
+        self.set_environment(event)
+        super().__call__(event, context)
+# -------------test-----------------
+
+
 # export port 8080
-handler = Mangum(app)
+api_gateway_base_path = "/api"
+handler = CustomMangum(app=app, api_gateway_base_path=api_gateway_base_path)
