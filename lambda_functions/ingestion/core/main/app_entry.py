@@ -138,8 +138,10 @@ class CustomMangum(Mangum):
     @staticmethod
     def set_environment(event):
         logger.info("[[ INFO ]] received invoke handler!")
-        os.environ["R2R_PROJECT_NAME"] = "r2r_accelerate"
-        logger.info(event)
+        identification_name = event["headers"]["x-acc-identification-name"]
+        # TODO: ここのidentification_nameで無限にDBスキーマが生成できるのでバリデーションを行う
+        os.environ["R2R_PROJECT_NAME"] = identification_name
+        logger.info(f"[[ INFO ]] identification_name = {identification_name}")
 
     def __call__(self, event, context):
         self.set_environment(event)
