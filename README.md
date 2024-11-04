@@ -117,5 +117,7 @@ make build
 make deploy
 ```
 
-- 次の手順は以下のページで確認
+- デプロイが完了したら、AWSにログインしてLambdaのイメージを更新してください。
+
+- 画像付きの説明は以下のページをご覧ください。
 - [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b#aws%E3%81%B8%E3%81%AE%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4)
