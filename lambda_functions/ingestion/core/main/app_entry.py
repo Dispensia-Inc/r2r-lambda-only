@@ -148,5 +148,5 @@ class CustomMangum(Mangum):
 
 
 # export port 8080
-api_gateway_base_path = "/api"
+api_gateway_base_path = "/api/ingestion"
 handler = CustomMangum(app=app, api_gateway_base_path=api_gateway_base_path)
