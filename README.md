@@ -70,7 +70,7 @@ make docker-run
 
 ## 動作確認
 
-- R2R に対してヘルスチェックを行うリクエスト
+- ローカルの Docker で R2R に対してヘルスチェックを行うリクエスト
 
 ```bash
 curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations" \
@@ -89,7 +89,7 @@ curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations"
 {"isBase64Encoded": false, "statusCode": 200, "headers": {"content-length": "18", "content-type": "application/json"}, "body": "{\"message\":\"test\"}"}
 ```
 
-### モジュールインポートの計測
+### モジュールインポート時間の計測
 
 ```bash
 pip install tuna
@@ -106,7 +106,8 @@ tuna prof.txt
 ## AWS ECR にデプロイ
 
 > [!IMPORTANT]
-> 以下のコマンドを実行するには aws-cli が必要です。
+> 以下のコマンドを実行するには aws-cli をインストールし事前のログインが必要です。
+> https://zenn.dev/konatsu/articles/5574c1f83757b6
 
 ```bash
 make build
@@ -118,25 +119,3 @@ make deploy
 
 - 次の手順は以下のページで確認
 - [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b#aws%E3%81%B8%E3%81%AE%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4)
-
-### もしくは
-
-```bash
-aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com
-```
-
-```bash
-make docker-build
-```
-
-```bash
-docker tag accelerate/r2r-lambda:latest 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda:latest
-```
-
-```bash
-docker push 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda:latest
-```
-
-## リファレンス
-
-- [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b)
