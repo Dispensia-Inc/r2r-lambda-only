@@ -1,27 +1,25 @@
+from ..main.assembly.factory import CustomR2RProviderFactory
+from .assembly.builder import CustomR2RBuilder
+from core.main.assembly import R2RConfig
+from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
+from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from typing import Optional
+from contextlib import asynccontextmanager
+import warnings
+import os
 import logging
 logger = logging.getLogger()
 
 logger.info("---starte program---")
-
-import os
-import warnings
-from contextlib import asynccontextmanager
-from typing import Optional
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
-from mangum import Mangum
-from fastapi.middleware.cors import CORSMiddleware
-from core.main.assembly import R2RConfig
-
-from .assembly.builder import CustomR2RBuilder
-from ..main.assembly.factory import CustomR2RProviderFactory
 
 
 # Global scheduler
 scheduler = AsyncIOScheduler()
 
 logger.info("---completed load modules---")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -143,6 +141,7 @@ class CustomMangum(Mangum):
     @staticmethod
     def set_environment(event):
         logger.info("[[ INFO ]] received invoke handler!")
+        logger.info(event)
         identification_name = event["headers"]["x-acc-identification-name"]
         # TODO: ここのidentification_nameで無限にDBスキーマが生成できるのでバリデーションを行う
         os.environ["R2R_PROJECT_NAME"] = identification_name
