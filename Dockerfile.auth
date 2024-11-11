@@ -8,6 +8,8 @@ COPY r2r.toml ./
 COPY pyproject.toml ./
 COPY core/ ./core/
 COPY shared/ ./shared/
+COPY lambda_functions/common/ ./lambda_functions/common/
+
 COPY lambda_functions/auth/ ./lambda_functions/auth/
 
 # タイムゾーンの設定
