@@ -1,0 +1,22 @@
+_format_version: "3.0"
+_transform: true
+
+routes:
+  - name: r2r-lambda-auth
+    paths: ["/"]
+
+plugins:
+  - route: r2r-lambda-auth
+    name: aws-lambda
+    config:
+      aws_region: ap-northeast-1
+      aws_key: DUMMY_KEY
+      aws_secret: DUMMY_SECRET
+      function_name: function
+      host: r2r-lambda-auth
+      port: 9000
+      disable_https: true
+      is_proxy_integration: true
+      awsgateway_compatible: true
+      base64_encode_body: false
+      invocation_type: Event
