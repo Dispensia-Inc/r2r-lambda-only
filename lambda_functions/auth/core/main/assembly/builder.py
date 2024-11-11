@@ -35,7 +35,7 @@ class CustomR2RBuilder(R2RBuilder):
         self, service_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         services = {}
-        services["ingestion"] = AuthService(**service_params)
+        services["auth"] = AuthService(**service_params)
         return services
 
     async def build(
@@ -80,7 +80,6 @@ class CustomR2RBuilder(R2RBuilder):
             pipes = self._create_pipes(
                 pipe_factory, providers, *args, **kwargs
             )
-            # TODO: pipeliesはauthで使われるか調べる
             pipelines = self._create_pipelines(
                 pipeline_factory, pipes, *args, **kwargs
             )
@@ -94,7 +93,7 @@ class CustomR2RBuilder(R2RBuilder):
 
         service_params = {
             "config": self.config,
-            "providers": providers,  # TODO: providersのorchestrationProviderはいらない？
+            "providers": providers,
             "pipes": pipes,
             "pipelines": pipelines,
             "agents": None,
