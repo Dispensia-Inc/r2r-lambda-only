@@ -57,10 +57,15 @@ class LambdaOrchestration:
         return login_result
 
     @handle_error
-    def verify_email(self):
-        # TODO: verify_emailを実装する
+    async def verify_email(self, email: str, verification_code: str):
+        """
+        メールアドレスを確認する
 
-        pass
+        This endpoint is used to confirm a user's email address using the verification code
+        sent to their email after registration.
+        """
+        result = await self.service.verify_email(email, verification_code)
+        return GenericMessageResponse(message=result["message"])
 
     @handle_error
     async def logout(self, token: str):
@@ -170,7 +175,6 @@ class LambdaOrchestration:
 
     @handle_error
     async def request_password_reset(self, email: str):
-        # TODO: request_password_resetを実装する
         """
         Request a password reset for a user.
 
@@ -181,6 +185,8 @@ class LambdaOrchestration:
         return GenericMessageResponse(message=result["message"])
 
     @handle_error
-    def reset_password(self):
-        # TODO: reset_passwordを実装する
-        pass
+    async def reset_password(self, reset_token: str, new_password: str):
+        result = await self.service.confirm_password_reset(
+            reset_token, new_password
+        )
+        return GenericMessageResponse(message=result["message"])

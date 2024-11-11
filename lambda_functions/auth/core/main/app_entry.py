@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 import warnings
 import json
@@ -80,8 +79,6 @@ async def create_r2r_app(
 
 config = R2RConfig.load(config_name, config_path)
 
-version_prefix = "v2"
-
 
 def get_token(event) -> str:
     try:
@@ -105,12 +102,11 @@ async def async_handler(event):
         config_path=config_path,
     )
 
-    # TODO: event pathから取得されるpath_prefixの形式を確認して修正
+    version_prefix = "v2"
     request_path = event["pathParameters"]["proxy"].replace(version_prefix, "")
     request_method = event["httpMethod"]
 
     # Controller
-    # TODO: それぞれの関数に引数を渡す
     match (request_path, request_method):
         case ("/register", "POST"):
             body = get_body(event["body"], ["email", "password"])
@@ -121,7 +117,9 @@ async def async_handler(event):
             return r2r_app.login(**body)
 
         case ("/verify_email", "POST"):
-            return r2r_app.verify_email(email, verification_code)
+            body = get_body(
+                event["body"], ["email", "verification_code"])
+            return r2r_app.verify_email(**body)
 
         case ("/logout", "POST"):
             token = get_token(event)
@@ -136,24 +134,31 @@ async def async_handler(event):
                 event["body"], ["user_id", "email", "is_superuser"])
             return r2r_app.update_user(**body)
 
-        case ("/user", "DELETE"):
-            return r2r_app.delete_user()
         case ("/refresh_access_token", "POST"):
-            return r2r_app.refresh_access_token()
+            return r2r_app.refresh_access_token(event["body"])
+
         case ("/change_password", "POST"):
-            return r2r_app.change_password()
+            token = get_token(event)
+            body = get_body(
+                event["body"], ["current_password", "new_password"])
+            return r2r_app.change_password(token=token, **body)
+
         case ("/request_password_reset", "POST"):
-            return r2r_app.request_password_reset()
+            return r2r_app.request_password_reset(event["body"])
+
         case ("/reset_password", "POST"):
-            return r2r_app.reset_password()
+            body = get_body(
+                event["body"], ["reset_token", "new_password"])
+            return r2r_app.reset_password(**body)
+
         case _:
-            uuid_reg_pattern = "([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})"
-            user_id_match = re.match(f"/user/{uuid_reg_pattern}", request_path)
-            user_id = user_id_match.group() if user_id_match else ""
-            if (user_id and request_method == "DELETE"):
+            if ("/user" in request_path and request_method == "DELETE"):
+                user_id = request_path.replace("/user/")
                 token = get_token(event)
-                # TODO: auth tokenとパスワードを引数に指定する
-                return r2r_app.delete_user(user_id, password)
+                body = get_body(
+                    event["body"], ["password", "delete_vector_data"])
+                return r2r_app.delete_user(token=token, user_id=user_id, **body)
+
             else:
                 return {"msg": f"path {event['path']} is 404 not found."}
 
