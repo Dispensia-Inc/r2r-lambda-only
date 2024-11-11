@@ -80,12 +80,6 @@ class CustomR2RProviderFactory(R2RProviderFactory):
 
         # インスタンス化のみ
         ingestion_provider = IngestionProvider(self.config.ingestion)
-        # ingestion_provider = (
-        #     ingestion_provider_override
-        #     or self.create_ingestion_provider(
-        #         self.config.ingestion, *args, **kwargs
-        #     )
-        # )
 
         llm_provider = llm_provider_override or self.create_llm_provider(
             self.config.completion, *args, **kwargs
