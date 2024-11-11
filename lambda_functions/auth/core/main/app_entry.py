@@ -2,6 +2,7 @@ import os
 import re
 import logging
 import warnings
+import json
 from asyncio import get_event_loop
 from typing import Optional
 
@@ -9,6 +10,7 @@ from core.main.assembly import R2RConfig
 
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
+from orchestration.lambda_orchestration import LambdaOrchestration
 
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +59,7 @@ logger.info(
 async def create_r2r_app(
     config_name: Optional[str] = "default",
     config_path: Optional[str] = None,
-):
+) -> LambdaOrchestration:
     config = R2RConfig.load(config_name, config_path)
 
     if (
@@ -89,6 +91,14 @@ def get_token(event) -> str:
         return ""
 
 
+def get_body(body: str, keys: list[str]) -> dict:
+    body = json.loads(body)
+    res = {}
+    for key in keys:
+        res[key] = body[key] if key in body.keys() else None
+    return res
+
+
 async def async_handler(event):
     r2r_app = await create_r2r_app(
         config_name=config_name,
@@ -99,23 +109,33 @@ async def async_handler(event):
     request_path = event["pathParameters"]["proxy"].replace(version_prefix, "")
     request_method = event["httpMethod"]
 
-    # TODO: それぞれの関数に引数を渡す
     # Controller
+    # TODO: それぞれの関数に引数を渡す
     match (request_path, request_method):
         case ("/register", "POST"):
-            return r2r_app.register(email, password)
+            body = get_body(event["body"], ["email", "password"])
+            return r2r_app.register(**body)
+
         case ("/login", "POST"):
-            return r2r_app.login(form_data)
+            body = get_body(event["body"], ["username", "password"])
+            return r2r_app.login(**body)
+
         case ("/verify_email", "POST"):
             return r2r_app.verify_email(email, verification_code)
+
         case ("/logout", "POST"):
             token = get_token(event)
             return r2r_app.logout(token)
+
         case ("/user", "GET"):
             token = get_token(event)
             return r2r_app.get_user(token)
+
         case ("/user", "PUT"):
-            return r2r_app.update_user()
+            body = get_body(
+                event["body"], ["user_id", "email", "is_superuser"])
+            return r2r_app.update_user(**body)
+
         case ("/user", "DELETE"):
             return r2r_app.delete_user()
         case ("/refresh_access_token", "POST"):

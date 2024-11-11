@@ -1,5 +1,10 @@
+from typing import Optional
+from uuid import UUID
 from pydantic import BaseModel, ValidationError
 
+from core.base.api.models import (
+    GenericMessageResponse
+)
 from core.base import R2RException
 from core.main.services.auth_service import AuthService
 
@@ -28,7 +33,7 @@ class LambdaOrchestration:
     @handle_error
     async def register(self, email, password):
         """
-        Register a new user with the given email and password.
+        メールアドレスとパスワードで新しいユーザーを作成する
         """
         try:
             register = Register(email, password)
@@ -43,7 +48,7 @@ class LambdaOrchestration:
     @handle_error
     async def login(self, username, password):
         """
-        Authenticate a user and provide access tokens.
+        ユーザーを認証してアクセストークンを返す
 
         This endpoint authenticates a user using their email (username) and password,
         and returns access and refresh tokens upon successful authentication.
@@ -54,16 +59,21 @@ class LambdaOrchestration:
     @handle_error
     def verify_email(self):
         # TODO: verify_emailを実装する
+
         pass
 
     @handle_error
-    def logout(self):
-        # TODO: logoutを実装する
-        pass
+    async def logout(self, token: str):
+        """
+        現在のユーザーをログアウトする
+
+        This endpoint invalidates the user's current access token, effectively logging them out.
+        """
+        result = await self.service.logout(token)
+        return GenericMessageResponse(message=result["message"])
 
     @handle_error
     async def get_user(self, token: str):
-        # TODO: ユーザー取得を実装する
         return await self.service.user(token)
 
     @handle_error
@@ -78,7 +88,7 @@ class LambdaOrchestration:
         token: str
     ):
         """
-        Update the current user's profile information.
+        現在のユーザープロフィール情報を更新する
 
         This endpoint allows the authenticated user to update their profile information.
         """
@@ -106,24 +116,69 @@ class LambdaOrchestration:
         )
 
     @handle_error
-    def delete_user(self):
-        # TODO: ユーザー削除を実装する
-        pass
+    async def delete_user(
+            self,
+            user_id: str,
+            password: Optional[str],
+            token: str,
+            # ユーザーのベクトルデータを削除するかどうか
+            delete_vector_data: Optional[bool] = False):
+        """
+        ユーザーアカウントを削除する
+
+        This endpoint allows users to delete their own account or, for superusers,
+        to delete any user account.
+        """
+        auth_user = self.service.user(token)
+        if str(auth_user.id) != user_id and not auth_user.is_superuser:
+            raise Exception("User ID does not match authenticated user")
+        if not auth_user.is_superuser and not password:
+            raise Exception("Password is required for non-superusers")
+        user_uuid = UUID(user_id)
+        result = await self.service.delete_user(
+            user_uuid, password, delete_vector_data
+        )
+        return GenericMessageResponse(message=result["message"])
 
     @handle_error
-    def refresh_access_token(self):
-        # TODO: refresh_access_tokenを実装する
-        pass
+    async def refresh_access_token(self, refresh_token: str):
+        """
+        リフレッシュトークンを使ってアクセストークンをリフレッシュする
+
+        This endpoint allows users to obtain a new access token using their refresh token.
+        """
+        refresh_result = await self.service.refresh_access_token(
+            refresh_token=refresh_token,
+        )
+        return refresh_result
 
     @handle_error
-    def change_password(self):
-        # TODO: change_passwordを実装する
-        pass
+    async def change_password(self, current_password: str, new_password: str, token: str):
+        """
+        認証済みユーザーのパスワードを変更する
+
+        This endpoint allows users to change their password by providing their current password
+        and a new password.
+        """
+        auth_user = self.service.user(token)
+        result = await self.service.change_password(
+            auth_user,
+            current_password,
+            new_password,
+        )
+        return GenericMessageResponse(message=result["message"])
 
     @handle_error
-    def request_password_reset(self):
+    async def request_password_reset(self, email: str):
         # TODO: request_password_resetを実装する
-        pass
+        """
+        Request a password reset for a user.
+
+        This endpoint initiates the password reset process by sending a reset link
+        to the specified email address.
+        """
+        result = await self.service.request_password_reset(email)
+        return GenericMessageResponse(message=result["message"])
 
     @handle_error
     def reset_password(self):
