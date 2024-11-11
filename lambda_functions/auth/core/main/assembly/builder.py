@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 from core.base import (
     AsyncPipe,
-    EmbeddingProvider,
     FileProvider,
     IngestionProvider,
     KGProvider,
@@ -13,6 +12,7 @@ from core.base import (
     R2RLoggingProvider,
     RunManager,
 )
+from core.providers import OpenAIEmbeddingProvider
 from core.main import (
     R2RBuilder,
     R2RConfig,
@@ -48,15 +48,6 @@ class CustomR2RBuilder(R2RBuilder):
         pipeline_factory = self.pipeline_factory_override or R2RPipelineFactory
 
         kwargs = {
-            # 除外するプロバイダのオーバーライドに空のインスタンスを渡して未処理にさせる
-            # (auth_provider_override, crypto_provider, database_providerは残す)
-            "embedding_provider_override": EmbeddingProvider(self.config.embedding),
-            "file_provider_override": FileProvider(self.config.file),
-            "ingestion_provider_override": IngestionProvider(self.config.ingestion),
-            "kg_provider_override": KGProvider(self.config.kg),
-            "llm_provider_override": CompletionProvider(self.config.completion),
-            "prompt_provider_override": PromptProvider(self.config.prompt),
-            "orchestration_provider_override": OrchestrationProvider(self.config.orchestration),
             # 除外するパイプのオーバーライドに空のインスタンスを渡して未処理にさせる
             "kg_triples_extraction_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
             "kg_storage_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),

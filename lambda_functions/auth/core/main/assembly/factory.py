@@ -42,7 +42,7 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             self.config.embedding.quantization_settings.quantization_type
         )
         if db_config.provider == "postgres":
-            from lambda_functions.ingestion.core.providers.database.postgres import CustomPostgresDBProvider
+            from lambda_functions.common.core.providers.database.postgres import CustomPostgresDBProvider
 
             database_provider = CustomPostgresDBProvider(
                 db_config,
@@ -78,12 +78,14 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             )
         )
 
-        ingestion_provider = (
-            ingestion_provider_override
-            or self.create_ingestion_provider(
-                self.config.ingestion, *args, **kwargs
-            )
-        )
+        # インスタンス化のみ
+        ingestion_provider = IngestionProvider(self.config.ingestion)
+        # ingestion_provider = (
+        #     ingestion_provider_override
+        #     or self.create_ingestion_provider(
+        #         self.config.ingestion, *args, **kwargs
+        #     )
+        # )
 
         llm_provider = llm_provider_override or self.create_llm_provider(
             self.config.completion, *args, **kwargs
@@ -101,11 +103,11 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             )
         )
 
-        # prompt_providerは使わないのでインスタンス化のみ（初期化は実行しない）
+        # インスタンス化のみ
         prompt_provider = R2RPromptProvider(
             self.config.prompt, database_provider)
 
-        # PostgresKGProviderをインスタンス化
+        # インスタンス化のみ
         kg_provider = PostgresKGProvider(
             self.config.kg,
             database_provider,

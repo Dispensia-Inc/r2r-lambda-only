@@ -9,7 +9,7 @@ from core.main.assembly import R2RConfig
 
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
-from orchestration.lambda_orchestration import LambdaOrchestration
+from .orchestration.lambda_orchestration import LambdaOrchestration
 
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO)
@@ -96,7 +96,7 @@ def get_body(body: str, keys: list[str]) -> dict:
     return res
 
 
-async def async_handler(event):
+async def async_handler(event, context):
     r2r_app = await create_r2r_app(
         config_name=config_name,
         config_path=config_path,
