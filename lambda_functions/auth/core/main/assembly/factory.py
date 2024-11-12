@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from core.base import (
+    AuthConfig,
     DatabaseConfig,
     CryptoProvider,
     DatabaseProvider,
@@ -23,6 +24,20 @@ from core.providers import R2RPromptProvider
 class CustomR2RProviderFactory(R2RProviderFactory):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
+
+    def create_auth_provider(
+        auth_config: AuthConfig,
+        db_provider: DatabaseProvider,
+        crypto_provider: CryptoProvider,
+        *args,
+        **kwargs,
+    ) -> AuthProvider:
+        from core.providers import R2RAuthProvider
+
+        r2r_auth = R2RAuthProvider(
+            auth_config, crypto_provider, db_provider
+        )
+        return r2r_auth
 
     async def create_database_provider(
         self,
