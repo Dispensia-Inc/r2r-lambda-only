@@ -17,10 +17,10 @@ docker-run:
 	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda
 
 docker-run-ingestion:
-	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda-ingestion
+	docker compose -f ./docker/docker-compose.ingestion.yml -p ingestion-worker up -d
 
 docker-run-auth:
-	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda-auth
+	docker compose -f ./docker/docker-compose.auth.yml -p auth-worker up -d
 
 deploy:
 	aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com
