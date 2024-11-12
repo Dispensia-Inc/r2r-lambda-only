@@ -11,7 +11,7 @@ docker-build-ingestion:
 	docker build --platform linux/arm64 -t accelerate/r2r-lambda-ingestion -f Dockerfile.ingestion .
 
 docker-build-auth:
-	docker build --platform linux/arm64 -t accelerate/r2r-lambda-auth -f Dockerfile.auth .
+	docker build --platform linux/arm64 -t accelerate/r2r-lambda-auth -f ./docker/Dockerfile/auth .
 
 docker-run:
 	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda
@@ -31,6 +31,12 @@ deploy-ingestion:
 	aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com
 	docker tag accelerate/r2r-lambda-ingestion:latest 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda-ingestion:latest
 	docker push 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/accelerate/r2r-lambda-ingestion:latest
+
+deploy-auth:
+	aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com
+	docker build --platform linux/arm64 -t r2r-lambda-auth -f ./docker/Dockerfile.auth .
+	docker tag r2r-lambda-auth:latest 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/r2r-lambda-auth:latest
+	docker push 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com/r2r-lambda-auth:latest
 
 deploy-hybrid-search:
 	aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin 548557419475.dkr.ecr.ap-northeast-1.amazonaws.com

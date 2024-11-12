@@ -16,7 +16,7 @@ plugins:
       host: r2r-lambda
       port: 8080
       disable_https: true
-      is_proxy_integration: true
+      is_proxy_integration: false
       awsgateway_compatible: true
       base64_encode_body: false
       invocation_type: Event
