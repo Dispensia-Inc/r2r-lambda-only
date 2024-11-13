@@ -105,56 +105,62 @@ async def async_handler(event, context):
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
 
+    response_data = {}
+
     # Controller
     match (request_path, request_method):
         case ("/register", "POST"):
             body = get_body(event["body"], ["email", "password"])
-            return await r2r_app.register(**body)
+            data = await r2r_app.register(**body)
+            response_data = vars(data)
 
         case ("/login", "POST"):
             body = get_body(event["body"], ["username", "password"])
             data = await r2r_app.login(**body)
-            response_data = {
-                "access_token": data["access_token"].token,
-                "refresh_token": data["refresh_token"].token
-            }
-            logger.info(f"login response: {response_data}")
-            return response_data
+            response_data = vars(data)
 
         case ("/verify_email", "POST"):
             body = get_body(
                 event["body"], ["email", "verification_code"])
-            return await r2r_app.verify_email(**body)
+            data = await r2r_app.verify_email(**body)
+            response_data = vars(data)
 
         case ("/logout", "POST"):
             token = get_token(event)
-            return await r2r_app.logout(token)
+            data = await r2r_app.logout(token)
+            response_data = vars(data)
 
         case ("/user", "GET"):
             token = get_token(event)
-            return await r2r_app.get_user(token)
+            data = await r2r_app.get_user(token)
+            response_data = vars(data)
 
         case ("/user", "PUT"):
             body = get_body(
                 event["body"], ["user_id", "email", "is_superuser"])
-            return await r2r_app.update_user(**body)
+            data = await r2r_app.update_user(**body)
+            response_data = vars(data)
 
         case ("/refresh_access_token", "POST"):
-            return await r2r_app.refresh_access_token(event["body"])
+            data = await r2r_app.refresh_access_token(event["body"])
+            response_data = vars(data)
 
         case ("/change_password", "POST"):
             token = get_token(event)
             body = get_body(
                 event["body"], ["current_password", "new_password"])
-            return await r2r_app.change_password(token=token, **body)
+            data = await r2r_app.change_password(token=token, **body)
+            response_data = vars(data)
 
         case ("/request_password_reset", "POST"):
-            return await r2r_app.request_password_reset(event["body"])
+            data = await r2r_app.request_password_reset(event["body"])
+            response_data = vars(data)
 
         case ("/reset_password", "POST"):
             body = get_body(
                 event["body"], ["reset_token", "new_password"])
-            return await r2r_app.reset_password(**body)
+            data = await r2r_app.reset_password(**body)
+            response_data = vars(data)
 
         case _:
             if ("/user" in request_path and request_method == "DELETE"):
@@ -162,10 +168,15 @@ async def async_handler(event, context):
                 token = get_token(event)
                 body = get_body(
                     event["body"], ["password", "delete_vector_data"])
-                return await r2r_app.delete_user(token=token, user_id=user_id, **body)
+                data = await r2r_app.delete_user(token=token, user_id=user_id, **body)
+                response_data = vars(data)
 
             else:
-                return {"msg": f"path {event['path']} is 404 not found."}
+                response_data = {"msg": f"path {
+                    event['path']} is 404 not found."}
+
+    logger.info(f"response data: {response_data}")
+    return response_data
 
 
 def handler(event, context):
