@@ -1,4 +1,5 @@
 from typing import Any, Optional
+import logging
 
 from core.base import (
     AuthConfig,
@@ -20,12 +21,15 @@ from core.providers import PostgresKGProvider
 from core.main.abstractions import R2RProviders
 from core.providers import R2RPromptProvider
 
+logger = logging.getLogger()
+
 
 class CustomR2RProviderFactory(R2RProviderFactory):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
 
-    def create_auth_provider(
+    async def create_auth_provider(
+        self,
         auth_config: AuthConfig,
         db_provider: DatabaseProvider,
         crypto_provider: CryptoProvider,

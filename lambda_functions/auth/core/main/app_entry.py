@@ -72,12 +72,8 @@ async def create_r2r_app(
     # Build the R2RApp
     builder = CustomR2RBuilder(config=config)
     # R2RProviderFactoryの上書き
-    # TODO: CustomR2RProviderFactoryでオーバーライドするのやめたい
     builder.with_provider_factory(CustomR2RProviderFactory)
     return await builder.build()
-
-
-config = R2RConfig.load(config_name, config_path)
 
 
 def get_token(event) -> str:
@@ -102,9 +98,10 @@ async def async_handler(event, context):
         config_path=config_path,
     )
 
-    version_prefix = "v2"
-    request_path = event["pathParameters"]["proxy"].replace(version_prefix, "")
+    path_prefix = "/auth"
+    request_path = event["path"].replace(path_prefix, "")
     request_method = event["httpMethod"]
+    logger.info("completed build.")
 
     # Controller
     match (request_path, request_method):
