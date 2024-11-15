@@ -1,0 +1,27 @@
+services:
+  r2r-lambda:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion
+    container_name: r2r-lambda
+    ports:
+      - "9000:8080"
+    networks:
+      - lambda-network
+  kong:
+    image: kong:latest
+    container_name: kong
+    ports:
+      - "7272:8000"
+    depends_on:
+      - r2r-lambda
+    environment:
+      KONG_DATABASE: off
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
+    volumes:
+      - ./kong:/usr/local/kong/declarative
+    networks:
+      - lambda-network
+
+networks:
+  lambda-network:
