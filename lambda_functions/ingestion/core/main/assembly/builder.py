@@ -73,7 +73,7 @@ class CustomR2RBuilder(R2RBuilder):
 
         service_params = {
             "config": self.config,
-            "providers": providers,  # TODO: providersのorchestrationProviderはいらない？
+            "providers": providers,
             "pipes": pipes,
             "pipelines": None,
             "agents": None,
