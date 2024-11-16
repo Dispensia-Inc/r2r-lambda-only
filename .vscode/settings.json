@@ -3,5 +3,6 @@
     "editor.defaultFormatter": "ms-python.autopep8",
     "editor.formatOnSave": true
   },
-  "makefile.configureOnOpen": false
+  "makefile.configureOnOpen": false,
+  "python.defaultInterpreterPath": "./accelerate-workspace/bin/python3"
 }
