@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from core.base import (
+    AuthConfig,
     DatabaseConfig,
     CryptoProvider,
     DatabaseProvider,
@@ -23,6 +24,38 @@ from core.providers import R2RPromptProvider
 class CustomR2RProviderFactory(R2RProviderFactory):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
+
+    async def create_auth_provider(
+        auth_config: AuthConfig,
+        db_provider: DatabaseProvider,
+        crypto_provider: CryptoProvider,
+        *args,
+        **kwargs,
+    ) -> AuthProvider:
+        if auth_config.provider == "r2r":
+            from core.providers import R2RAuthProvider
+
+            r2r_auth = R2RAuthProvider(
+                auth_config, crypto_provider, db_provider
+            )
+            await r2r_auth.initialize()
+            return r2r_auth
+        elif auth_config.provider == "supabase":
+            from core.providers import SupabaseAuthProvider
+
+            return SupabaseAuthProvider(
+                auth_config, crypto_provider, db_provider
+            )
+        elif auth_config.provider == "cognito":
+            from lambda_functions.common.core.providers.auth.cognito import CognitoAuthProvider
+
+            return CognitoAuthProvider(
+                auth_config, crypto_provider, db_provider
+            )
+        else:
+            raise ValueError(
+                f"Auth provider {auth_config.provider} not supported."
+            )
 
     async def create_database_provider(
         self,
@@ -112,6 +145,7 @@ class CustomR2RProviderFactory(R2RProviderFactory):
             embedding_provider
         )
 
+        # TODO: cognito用のauth_providerを作成する
         auth_provider = (
             auth_provider_override
             or await self.create_auth_provider(
