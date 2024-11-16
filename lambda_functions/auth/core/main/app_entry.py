@@ -117,18 +117,21 @@ async def async_handler(event, context):
         case ("/login", "POST"):
             body = get_body(event["body"], ["username", "password"])
             data = await r2r_app.login(**body)
-            response_data = vars(data)
+            response_data = {
+                "access_token": data["access_token"].model_dump_json(),
+                "refresh_token": data["refresh_token"].model_dump_json(),
+            }
 
         case ("/verify_email", "POST"):
             body = get_body(
                 event["body"], ["email", "verification_code"])
             data = await r2r_app.verify_email(**body)
-            response_data = vars(data)
+            response_data = data.model_dump_json()
 
         case ("/logout", "POST"):
             token = get_token(event)
             data = await r2r_app.logout(token)
-            response_data = vars(data)
+            response_data = data.model_dump_json()
 
         case ("/user", "GET"):
             token = get_token(event)
