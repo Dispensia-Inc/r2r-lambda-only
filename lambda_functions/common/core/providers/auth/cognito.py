@@ -1,3 +1,4 @@
+import json
 import boto3
 
 from core.base import (
@@ -21,19 +22,22 @@ class CognitoAuthProvider(AuthProvider):
         try:
             response = self.client.get_user(AccessToken=token)
 
-            user = {attr["Name"]: attr["Value"]
-                    for attr in response["UserAttributes"]}
-            user["name"] = response["Username"]
+            user_data = {attr["Name"]: attr["Value"]
+                         for attr in response["UserAttributes"]}
+            user_data["name"] = response["Username"]
 
             return UserResponse(
-                id=user["sub"],
-                email=user["email"],
-                is_active=user["custom:is_active"],
-                is_superuser=user["custom:is_superuser"],
+                id=user_data["sub"],
+                email=user_data["email"],
+                is_active=user_data["custom:is_active"],
+                is_superuser=user_data["custom:is_superuser"],
+                collection_ids=json.loads(user_data["custom:collection_ids"]),
+                name=user_data["name"],
+                bio=user_data["custom:bio"],
+                profile_picture=user_data["custom:profile_picture"],
+                is_verified=user_data["custom:is_verified"],
                 created_at=None,
                 updated_at=None,
-                is_verified=True,
-                name=user["name"],
             )
 
         except Exception as e:
