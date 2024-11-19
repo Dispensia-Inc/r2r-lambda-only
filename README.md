@@ -4,7 +4,7 @@
 
 - lambda-auth
   - コールドスタート状態：5500ms
-  - ホットスタンバイ状態：130ms
+  - ウォームスタート状態：130ms
 
 ## Environments
 
