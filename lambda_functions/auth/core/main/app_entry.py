@@ -93,19 +93,22 @@ def get_body(body: str, keys: list[str]) -> dict:
 
 
 async def async_handler(event, context):
-    r2r_app = await create_r2r_app(
-        config_name=config_name,
-        config_path=config_path,
-    )
 
     path_prefix = "/auth"
     request_path = event["path"].replace(path_prefix, "")
     request_method = event["httpMethod"]
-    logger.info("completed build.")
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
+    # TODO: 会社IDをバリデーションしてfalseならここでreturnする
 
     response_data = {}
+
+    # R2Rを初期化
+    r2r_app = await create_r2r_app(
+        config_name=config_name,
+        config_path=config_path,
+    )
+    logger.info("completed build.")
 
     # Controller
     match (request_path, request_method):
