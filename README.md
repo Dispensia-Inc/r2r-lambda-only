@@ -1,5 +1,11 @@
 # R2R Lambda
 
+## 起動時間
+
+- lambda-auth
+  - コールドスタート状態：5500ms
+  - ホットスタンバイ状態：130ms
+
 ## Environments
 
 - Python 3.12
@@ -117,7 +123,7 @@ make build
 make deploy
 ```
 
-- デプロイが完了したら、AWSにログインしてLambdaのイメージを更新してください。
+- デプロイが完了したら、AWS にログインして Lambda のイメージを更新してください。
 
 - 画像付きの説明は以下のページをご覧ください。
 - [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b#aws%E3%81%B8%E3%81%AE%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4)
