@@ -1,6 +1,7 @@
 import os
 import json
 import boto3
+import datetime
 
 from core.base import (
     AuthConfig,
@@ -48,9 +49,9 @@ class CognitoAuthProvider(AuthProvider):
                 name=user_data["name"],
                 bio=user_data["custom:bio"],
                 profile_picture=user_data["custom:profile_picture"],
-                is_verified=user_data["custom:is_verified"],
-                created_at=None,
-                updated_at=None,
+                is_verified=user_data["email_verified"],
+                created_at=datetime.datetime.now(),
+                updated_at=datetime.datetime.now(),
             )
 
         except Exception as e:

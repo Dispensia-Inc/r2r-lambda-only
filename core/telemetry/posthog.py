@@ -54,6 +54,6 @@ debug_mode = os.getenv("DEBUG_MODE", "false").lower() in (
     "t",
 )
 telemetry_client = PosthogClient(
-    api_key="phx_pNHi8OmZJ2ePKa0srGjN6CODYzw5oSeKKVRckAq5W7012ld",
+    api_key=os.getenv("POSTHOG_API", ""),
     enabled=telemetry_enabled,
 )
