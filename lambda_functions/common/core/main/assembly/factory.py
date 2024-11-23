@@ -18,6 +18,7 @@ class AWSR2RProviderFactory(R2RProviderFactory):
         super().__init__(config)
 
     async def create_auth_provider(
+        self,
         auth_config: AuthConfig,
         db_provider: DatabaseProvider,
         crypto_provider: CryptoProvider,

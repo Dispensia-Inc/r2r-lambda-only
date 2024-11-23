@@ -79,7 +79,10 @@ class LambdaOrchestration:
 
     @handle_error
     async def get_user(self, token: str):
-        return await self.service.user(token)
+        if token:
+            return await self.service.user(token)
+        else:
+            GenericMessageResponse(message="error: The token was not found.")
 
     @handle_error
     async def update_user(
