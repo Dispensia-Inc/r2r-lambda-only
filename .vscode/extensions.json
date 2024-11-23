@@ -1,3 +1,7 @@
 {
-  "recommendations": ["ms-python.autopep8"]
+  "recommendations": [
+    "ms-python.autopep8",
+    "boto3typed.boto3-ide",
+    "ms-python.vscode-pylance"
+  ]
 }

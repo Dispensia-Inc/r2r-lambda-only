@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, ValidationError
@@ -5,8 +6,10 @@ from pydantic import BaseModel, ValidationError
 from core.base.api.models import (
     GenericMessageResponse
 )
-from core.base import R2RException
+from core.base import R2RException, UserResponse
 from core.main.services.auth_service import AuthService
+
+logger = logging.getLogger()
 
 
 class Register(BaseModel):
@@ -18,8 +21,9 @@ def handle_error(func):
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as e:
-            return e
+        except Exception as err:
+            logger.error(str(err))
+            return GenericMessageResponse(message=err["errorMessage"])
     return inner
 
 
@@ -79,7 +83,8 @@ class LambdaOrchestration:
 
     @handle_error
     async def get_user(self, token: str):
-        return await self.service.user(token)
+        user = await self.service.user(token)
+        return user.to_dict()
 
     @handle_error
     async def update_user(

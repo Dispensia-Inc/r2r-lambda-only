@@ -6,6 +6,7 @@ from asyncio import get_event_loop
 from typing import Optional
 
 from core.main.assembly import R2RConfig
+from shared.abstractions import R2RException
 
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
@@ -78,9 +79,10 @@ async def create_r2r_app(
 
 def get_token(event) -> str:
     try:
-        return event["queryStringParameters"]["Authorization"].relpace(
+        return event["headers"]["authorization"].replace(
             "Bearer ", "")
-    except:
+    except Exception as e:
+        logger.error(f"{e}")
         return ""
 
 
@@ -93,87 +95,84 @@ def get_body(body: str, keys: list[str]) -> dict:
 
 
 async def async_handler(event, context):
-    r2r_app = await create_r2r_app(
-        config_name=config_name,
-        config_path=config_path,
-    )
 
     path_prefix = "/auth"
     request_path = event["path"].replace(path_prefix, "")
     request_method = event["httpMethod"]
-    logger.info("completed build.")
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
+    # TODO: 会社IDをバリデーションしてfalseならここでreturnする
 
     response_data = {}
 
+    # R2Rを初期化
+    r2r_app = await create_r2r_app(
+        config_name=config_name,
+        config_path=config_path,
+    )
+    logger.info("completed build.")
+
     # Controller
     match (request_path, request_method):
-        case ("/register", "POST"):
-            body = get_body(event["body"], ["email", "password"])
-            data = await r2r_app.register(**body)
-            response_data = vars(data)
+        # case ("/register", "POST"):
+        #     body = get_body(event["body"], ["email", "password"])
+        #     data = await r2r_app.register(**body)
+        #     response_data = vars(data)
 
-        case ("/login", "POST"):
-            body = get_body(event["body"], ["username", "password"])
-            data = await r2r_app.login(**body)
-            response_data = vars(data)
+        # case ("/login", "POST"):
+        #     body = get_body(event["body"], ["username", "password"])
+        #     data = await r2r_app.login(**body)
+        #     response_data = {
+        #         "access_token": data["access_token"].model_dump_json(),
+        #         "refresh_token": data["refresh_token"].model_dump_json(),
+        #     }
 
-        case ("/verify_email", "POST"):
-            body = get_body(
-                event["body"], ["email", "verification_code"])
-            data = await r2r_app.verify_email(**body)
-            response_data = vars(data)
+        # case ("/verify_email", "POST"):
+        #     body = get_body(
+        #         event["body"], ["email", "verification_code"])
+        #     data = await r2r_app.verify_email(**body)
+        #     response_data = data.model_dump_json()
 
-        case ("/logout", "POST"):
-            token = get_token(event)
-            data = await r2r_app.logout(token)
-            response_data = vars(data)
+        # case ("/logout", "POST"):
+        #     token = get_token(event)
+        #     data = await r2r_app.logout(token)
+        #     response_data = data.model_dump_json()
 
         case ("/user", "GET"):
             token = get_token(event)
-            data = await r2r_app.get_user(token)
-            response_data = vars(data)
+            response_data = await r2r_app.get_user(token)
 
-        case ("/user", "PUT"):
-            body = get_body(
-                event["body"], ["user_id", "email", "is_superuser"])
-            data = await r2r_app.update_user(**body)
-            response_data = vars(data)
+        # case ("/user", "PUT"):
+        #     body = get_body(
+        #         event["body"], ["user_id", "email", "is_superuser"])
+        #     data = await r2r_app.update_user(**body)
+        #     response_data = vars(data)
 
-        case ("/refresh_access_token", "POST"):
-            data = await r2r_app.refresh_access_token(event["body"])
-            response_data = vars(data)
+        # case ("/refresh_access_token", "POST"):
+        #     data = await r2r_app.refresh_access_token(event["body"])
+        #     response_data = vars(data)
 
-        case ("/change_password", "POST"):
-            token = get_token(event)
-            body = get_body(
-                event["body"], ["current_password", "new_password"])
-            data = await r2r_app.change_password(token=token, **body)
-            response_data = vars(data)
+        # case ("/change_password", "POST"):
+        #     token = get_token(event)
+        #     body = get_body(
+        #         event["body"], ["current_password", "new_password"])
+        #     data = await r2r_app.change_password(token=token, **body)
+        #     response_data = vars(data)
 
-        case ("/request_password_reset", "POST"):
-            data = await r2r_app.request_password_reset(event["body"])
-            response_data = vars(data)
+        # case ("/request_password_reset", "POST"):
+        #     data = await r2r_app.request_password_reset(event["body"])
+        #     response_data = vars(data)
 
-        case ("/reset_password", "POST"):
-            body = get_body(
-                event["body"], ["reset_token", "new_password"])
-            data = await r2r_app.reset_password(**body)
-            response_data = vars(data)
+        # case ("/reset_password", "POST"):
+        #     body = get_body(
+        #         event["body"], ["reset_token", "new_password"])
+        #     data = await r2r_app.reset_password(**body)
+        #     response_data = vars(data)
 
         case _:
-            if ("/user" in request_path and request_method == "DELETE"):
-                user_id = request_path.replace("/user/")
-                token = get_token(event)
-                body = get_body(
-                    event["body"], ["password", "delete_vector_data"])
-                data = await r2r_app.delete_user(token=token, user_id=user_id, **body)
-                response_data = vars(data)
-
-            else:
-                response_data = {"msg": f"path {
-                    event['path']} is 404 not found."}
+            error_response = R2RException(
+                message=f"path {event['path']} was not found.", status_code=400)
+            response_data = error_response.to_dict()
 
     logger.info(f"response data: {response_data}")
     return response_data

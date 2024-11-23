@@ -33,7 +33,8 @@ class PosthogClient:
             posthog.debug = True
 
         logger.info(
-            f"Posthog telemetry {'enabled' if self.enabled else 'disabled'}, debug mode {'on' if self.debug else 'off'}"
+            f"Posthog telemetry {'enabled' if self.enabled else 'disabled'}, debug mode {
+                'on' if self.debug else 'off'}"
         )
 
     def capture(self, event: BaseTelemetryEvent):
@@ -53,6 +54,6 @@ debug_mode = os.getenv("DEBUG_MODE", "false").lower() in (
     "t",
 )
 telemetry_client = PosthogClient(
-    api_key="phc_OPBbibOIErCGc4NDLQsOrMuYFTKDmRwXX6qxnTr6zpU",
+    api_key=os.getenv("POSTHOG_API", ""),
     enabled=telemetry_enabled,
 )

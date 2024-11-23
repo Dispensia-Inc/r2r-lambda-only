@@ -11,7 +11,10 @@ docker-build-ingestion:
 	docker build --platform linux/arm64 -t accelerate/r2r-lambda-ingestion -f Dockerfile.ingestion .
 
 docker-build-auth:
-	docker build --platform linux/arm64 -t accelerate/r2r-lambda-auth -f ./docker/Dockerfile/auth .
+	docker build --platform linux/arm64 -t r2r-lambda-auth -f ./docker/Dockerfile.auth .
+
+docker-compose-build-auth:
+	docker compose -f ./docker/docker-compose.auth.yml -p auth-worker build
 
 docker-run:
 	docker run --env-file .env -p 9000:8080 accelerate/r2r-lambda

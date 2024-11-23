@@ -3,26 +3,19 @@ from typing import Any, Dict
 
 from core.base import (
     AsyncPipe,
-    FileProvider,
-    IngestionProvider,
-    KGProvider,
-    CompletionProvider,
-    PromptProvider,
-    OrchestrationProvider,
     R2RLoggingProvider,
     RunManager,
 )
-from core.providers import OpenAIEmbeddingProvider
 from core.main import (
     R2RBuilder,
     R2RConfig,
-    AuthService,
     R2RPipeFactory,
     R2RPipelineFactory,
 )
 
 from .factory import CustomR2RProviderFactory
 from ..orchestration.lambda_orchestration import LambdaOrchestration
+from lambda_functions.common.core.main.services.auth_service import CognitoAuthService
 
 logger = logging.getLogger()
 
@@ -34,8 +27,9 @@ class CustomR2RBuilder(R2RBuilder):
     def _create_services(
         self, service_params: Dict[str, Any]
     ) -> Dict[str, Any]:
+        # CognitoAuthServiceだけインスタンス化する
         services = {}
-        services["auth"] = AuthService(**service_params)
+        services["auth"] = CognitoAuthService(**service_params)
         return services
 
     async def build(

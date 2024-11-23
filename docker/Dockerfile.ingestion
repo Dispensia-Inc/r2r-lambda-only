@@ -6,12 +6,12 @@ FROM public.ecr.aws/lambda/python:3.12
 WORKDIR ${LAMBDA_TASK_ROOT}
 
 # ファイルのコピー
-COPY ../requirements.txt ./
-COPY ../r2r.toml ./
-COPY ../pyproject.toml ./
-COPY ../core/ ./core/
-COPY ../shared/ ./shared/
-COPY ../lambda_functions/ ./lambda_functions/
+COPY requirements.txt ./
+COPY r2r.toml ./
+COPY pyproject.toml ./
+COPY core/ ./core/
+COPY shared/ ./shared/
+COPY lambda_functions/ ./lambda_functions/
 
 # タイムゾーンの設定
 RUN ln -sf  /usr/share/zoneinfo/Asia/Tokyo /etc/localtime

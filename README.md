@@ -1,5 +1,11 @@
 # R2R Lambda
 
+## 起動時間
+
+- lambda-auth
+  - コールドスタート状態：5500ms
+  - ウォームスタート状態：130ms
+
 ## Environments
 
 - Python 3.12
@@ -52,20 +58,23 @@ deactivate
 pip install -r requirements.txt
 ```
 
-## Run (ローカル環境)
+## 実行
+
+### Auth Worker
+
+- ビルド
 
 ```bash
-make dev
+make docker-compose-build-auth
 ```
 
-## Run (Docker 環境)
+> [!IMPORTANT]
+> 前回ビルドしたイメージが上書きされるわけではなく、ビルドごとに蓄積されていくため、不要なイメージは定期的に削除することをおすすめします。
+
+- 起動
 
 ```bash
-make docker-build
-```
-
-```bash
-make docker-run
+make docker-run-auth
 ```
 
 ## 動作確認
@@ -73,14 +82,7 @@ make docker-run
 - ローカルの Docker で R2R に対してヘルスチェックを行うリクエスト
 
 ```bash
-curl -X "POST" "http://localhost:9000/2015-03-31/functions/function/invocations" \
--H 'Content-Type: application/json; charset=utf-8' \
--d $'{
-  "path": "/v2/health",
-  "requestContext": {},
-  "httpMethod": "GET",
-  "multiValueQueryStringParameters": {}
-}'
+curl -X "POST" "http://localhost:7272/health"
 ```
 
 - レスポンス
@@ -117,7 +119,35 @@ make build
 make deploy
 ```
 
-- デプロイが完了したら、AWSにログインしてLambdaのイメージを更新してください。
+- デプロイが完了したら、AWS にログインして Lambda のイメージを更新してください。
 
 - 画像付きの説明は以下のページをご覧ください。
 - [FastAPI (mangum) を AWS Lambda で動かす](https://zenn.dev/alleeks/articles/a286144465cb6b#aws%E3%81%B8%E3%81%AE%E3%83%87%E3%83%97%E3%83%AD%E3%82%A4)
+
+## 一時的な認証情報の取得
+
+- ローカルでの開発時では Cognito にアクセスするために一時的な認証情報が必要になります。
+- 一時的な認証情報は発行してから 12 時間が経過すると失効するため、その際には再度発行が必要になります。
+- 以下のコマンドで発行してください。
+
+```bash
+aws sts get-session-token --profile developer
+```
+
+- 出力された結果を環境変数に設定してください。
+
+```bash
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+```
+
+> [!WARNING]
+> 以下は必要ないかも
+
+- ローカルでの開発時では Cognito にアクセスするために一時的な認証情報が必要になります。
+- 一時的な認証情報は発行してから 12 時間が経過すると失効するため、その際には再度発行が必要になります。
+- まだ aws-cli に developer アカウントを登録していない場合は次のコマンド（`aws configure --profile developer`）で登録してください。（登録情報は git 管理できないためテキストでお渡しします。）
+
+```bash
+aws sts assume-role --role-arn arn:aws:iam::548557419475:role/accelerate-r2r-lambda --profile developer --role-session-name "RoleSession1" > assume-role-output.txt
+```
