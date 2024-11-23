@@ -68,6 +68,9 @@ pip install -r requirements.txt
 make docker-compose-build-auth
 ```
 
+> [!IMPORTANT]
+> 前回ビルドしたイメージが上書きされるわけではなく、ビルドごとに蓄積されていくため、不要なイメージは定期的に削除することをおすすめします。
+
 - 起動
 
 ```bash
@@ -128,7 +131,14 @@ make deploy
 - 以下のコマンドで発行してください。
 
 ```bash
-aws sts get-session-token
+aws sts get-session-token --profile developer
+```
+
+- 出力された結果を環境変数に設定してください。
+
+```bash
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
 ```
 
 > [!WARNING]
