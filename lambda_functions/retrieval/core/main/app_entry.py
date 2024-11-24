@@ -8,6 +8,7 @@ from typing import Optional
 from core.main.assembly import R2RConfig
 from shared.abstractions import R2RException
 
+from lambda_functions.common.core.main.exception import LambdaException
 from .assembly.builder import CustomR2RBuilder
 from ..main.assembly.factory import CustomR2RProviderFactory
 from .orchestration.lambda_orchestration import LambdaOrchestration
@@ -101,9 +102,14 @@ async def async_handler(event, context):
     request_method = event["httpMethod"]
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
-    # TODO: 会社IDをバリデーションしてfalseならここでreturnする
-    os.environ["R2R_PROJECT_NAME"] = get_body(
+    # TODO: 会社IDをバリデーションしてfalseならここでraiseする
+    identification_name = get_body(
         event["body"], ["x-acc-identification-name"])
+    if identification_name:
+        os.environ["R2R_PROJECT_NAME"] = identification_name
+    else:
+        raise LambdaException(
+            "x-acc-identification-name header was not found.", 404)
 
     response_data = {}
 
