@@ -116,14 +116,11 @@ async def async_handler(event, context):
 
     # Controller
     match (request_path, request_method):
-        # case ("/register", "POST"):
-        #     body = get_body(event["body"], ["email", "password"])
-        #     data = await r2r_app.register(**body)
-        #     response_data = vars(data)
-
-        case ("/user", "GET"):
+        case ("/search", "POST"):
             token = get_token(event)
-            response_data = await r2r_app.get_user(token)
+            body = get_body(
+                event["body"], ["query", "selected_collection_ids"])
+            response_data = await r2r_app.search(token, **body)
 
         case _:
             error_response = R2RException(
