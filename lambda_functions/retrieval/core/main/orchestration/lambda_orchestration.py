@@ -101,7 +101,7 @@ class LambdaOrchestration:
         self,
         token: str,
         query: str,
-        selected_collection_ids: List[UUID],
+        selected_collection_ids: List[UUID] = [],
     ):
         auth_user = self.services.auth.user(token)
 
