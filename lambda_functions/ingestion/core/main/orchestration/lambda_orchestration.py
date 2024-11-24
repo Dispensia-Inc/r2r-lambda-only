@@ -31,9 +31,9 @@ class LambdaOrchestration:
         else:
             return False
 
+    # TODO: FastAPIを使わずに実装する
     async def ingest_files_app(
         self,
-        # TODO: FastAPIからじゃなくて引数から直接指定する
         files: list[UploadFile] = File(),
         document_ids: Optional[Json[list[UUID]]] = Form(None),
         metadatas: Optional[Json[list[dict]]] = Form(None),

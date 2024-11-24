@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 from core.base import (
     AsyncPipe,
-    R2RLoggingProvider,
     RunManager,
 )
 from core.main import (
@@ -68,7 +67,7 @@ class CustomR2RBuilder(R2RBuilder):
             logger.error(f"Error creating providers, pipes, or pipelines: {e}")
             raise
 
-        run_singleton = R2RLoggingProvider()
+        run_singleton = R2RLoggingProvider()  # TODO: バージョン対応
         run_manager = RunManager(run_singleton)
 
         service_params = {

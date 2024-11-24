@@ -166,35 +166,35 @@ class Community(BaseModel):
     id: int | None = None
     """The ID of the community."""
 
+    community_number: int | None = None
+    """The community number."""
+
+    collection_id: uuid.UUID | None = None
+    """The ID of the collection this community is associated with."""
+
     level: int | None = None
     """Community level."""
 
-    entity_ids: list[str] | None = None
-    """List of entity IDs related to the community (optional)."""
-
-    relationship_ids: list[str] | None = None
-    """List of relationship IDs related to the community (optional)."""
-
-    covariate_ids: dict[str, list[str]] | None = None
-    """Dictionary of different types of covariates related to the community (optional), e.g. claims"""
-
-    attributes: dict[str, Any] | None = None
-    """A dictionary of additional attributes associated with the community (optional). To be included in the search prompt."""
+    name: str = ""
+    """The name of the community."""
 
     summary: str = ""
     """Summary of the report."""
 
-    full_content: str = ""
-    """Full content of the report."""
+    findings: list[str] = []
+    """Findings of the report."""
 
-    rank: float | None = 1.0
-    """Rank of the report, used for sorting (optional). Higher means more important"""
+    rating: float | None = None
+    """Rating of the report."""
+
+    rating_explanation: str | None = None
+    """Explanation of the rating."""
 
     embedding: list[float] | None = None
-    """The semantic (i.e. text) embedding of the report summary (optional)."""
+    """Embedding of summary and findings."""
 
-    full_content_embedding: list[float] | None = None
-    """The semantic (i.e. text) embedding of the full report content (optional)."""
+    attributes: dict[str, Any] | None = None
+    """A dictionary of additional attributes associated with the community (optional). To be included in the search prompt."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -224,6 +224,34 @@ class Community(BaseModel):
             relationship_ids=d.get(relationships_key),
             covariate_ids=d.get(covariates_key),
             attributes=d.get(attributes_key),
+        )
+
+
+@dataclass
+class CommunityInfo(BaseModel):
+    """A protocol for a community in the system."""
+
+    node: str
+    cluster: int
+    parent_cluster: int | None
+    level: int
+    is_final_cluster: bool
+    collection_id: uuid.UUID
+    triple_ids: Optional[list[int]] = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "CommunityInfo":
+        return CommunityInfo(
+            node=d["node"],
+            cluster=d["cluster"],
+            parent_cluster=d["parent_cluster"],
+            level=d["level"],
+            is_final_cluster=d["is_final_cluster"],
+            triple_ids=d["triple_ids"],
+            collection_id=d["collection_id"],
         )
 
 

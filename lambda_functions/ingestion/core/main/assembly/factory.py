@@ -8,15 +8,10 @@ from core.base import (
     AuthProvider,
     CompletionProvider,
     EmbeddingProvider,
-    FileProvider,
     IngestionProvider,
-    PromptProvider,
 )
 from core.main.config import R2RConfig
-from core.providers import PostgresKGProvider
 from core.main.abstractions import R2RProviders
-from core.providers import R2RPromptProvider
-
 
 from lambda_functions.common.core.main.assembly.factory import AWSR2RProviderFactory
 
@@ -25,6 +20,7 @@ class CustomR2RProviderFactory(AWSR2RProviderFactory):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
 
+    # TODO: バージョン対応
     async def create_providers(
         self,
         auth_provider_override: Optional[AuthProvider] = None,

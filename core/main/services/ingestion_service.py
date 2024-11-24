@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any, AsyncGenerator, Optional, Sequence, Union
 from uuid import UUID
+from fastapi import HTTPException
 
 from core.base import (
     Document,
@@ -13,7 +14,6 @@ from core.base import (
     DocumentType,
     IngestionStatus,
     R2RException,
-    R2RLoggingProvider,
     RawChunk,
     RunManager,
     Vector,
@@ -21,17 +21,16 @@ from core.base import (
     VectorType,
     decrement_version,
 )
-from core.base.api.models import UserResponse
-from core.telemetry.telemetry_decorator import telemetry_event
-from shared.abstractions.ingestion import (
+from core.base.abstractions import (
     ChunkEnrichmentSettings,
     ChunkEnrichmentStrategy,
-)
-from shared.abstractions.vector import (
     IndexMeasure,
     IndexMethod,
     VectorTableName,
 )
+from core.base.api.models import UserResponse
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
+from core.telemetry.telemetry_decorator import telemetry_event
 
 from ..abstractions import R2RAgents, R2RPipelines, R2RPipes, R2RProviders
 from ..config import R2RConfig
@@ -53,7 +52,7 @@ class IngestionService(Service):
         pipelines: R2RPipelines,
         agents: R2RAgents,
         run_manager: RunManager,
-        logging_connection: R2RLoggingProvider,
+        logging_connection: SqlitePersistentLoggingProvider,
     ) -> None:
         super().__init__(
             config,
@@ -75,6 +74,7 @@ class IngestionService(Service):
         metadata: Optional[dict] = None,
         version: Optional[str] = None,
         is_update: bool = False,
+        collection_ids: Optional[list[UUID]] = None,
         *args: Any,
         **kwargs: Any,
     ) -> dict:
@@ -136,8 +136,8 @@ class IngestionService(Service):
             logger.error(f"R2RException in ingest_file_ingress: {str(e)}")
             raise
         except Exception as e:
-            raise R2RException(
-                status_code=500, message=f"Error during ingestion: {str(e)}"
+            raise HTTPException(
+                status_code=500, detail=f"Error during ingestion: {str(e)}"
             )
 
     def _create_document_info_from_file(
@@ -163,7 +163,7 @@ class IngestionService(Service):
             id=document_id,
             user_id=user.id,
             collection_ids=metadata.get("collection_ids", []),
-            type=DocumentType[file_extension.upper()],
+            document_type=DocumentType[file_extension.upper()],
             title=metadata.get("title", file_name.split("/")[-1]),
             metadata=metadata,
             version=version,
@@ -188,7 +188,7 @@ class IngestionService(Service):
             id=document_id,
             user_id=user.id,
             collection_ids=metadata.get("collection_ids", []),
-            type=DocumentType.TXT,
+            document_type=DocumentType.TXT,
             title=metadata.get("title", f"Ingested Chunks - {document_id}"),
             metadata=metadata,
             version=version,
@@ -209,11 +209,11 @@ class IngestionService(Service):
                     id=document_info.id,
                     collection_ids=document_info.collection_ids,
                     user_id=document_info.user_id,
-                    type=document_info.type,
                     metadata={
-                        "document_type": document_info.type.value,
+                        "document_type": document_info.document_type.value,
                         **document_info.metadata,
                     },
+                    document_type=document_info.document_type,
                 )
             ),
             state=None,
@@ -348,6 +348,78 @@ class IngestionService(Service):
 
         return document_info
 
+    @telemetry_event("UpdateChunk")
+    async def update_chunk_ingress(
+        self,
+        document_id: UUID,
+        extraction_id: UUID,
+        text: str,
+        user: UserResponse,
+        metadata: Optional[dict] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict:
+        # Verify chunk exists and user has access
+        existing_chunks = await self.providers.database.get_document_chunks(
+            document_id=document_id, limit=1
+        )
+
+        if not existing_chunks["results"]:
+            raise R2RException(
+                status_code=404,
+                message=f"Chunk with extraction_id {extraction_id} not found.",
+            )
+
+        existing_chunk = await self.providers.database.get_chunk(extraction_id)
+        if not existing_chunk:
+            raise R2RException(
+                status_code=404,
+                message=f"Chunk with id {extraction_id} not found",
+            )
+
+        if (
+            str(existing_chunk["user_id"]) != str(user.id)
+            and not user.is_superuser
+        ):
+            raise R2RException(
+                status_code=403,
+                message="You don't have permission to modify this chunk.",
+            )
+
+        # Handle metadata merging
+        if metadata is not None:
+            merged_metadata = {
+                **existing_chunk["metadata"],
+                **metadata,
+            }
+        else:
+            merged_metadata = existing_chunk["metadata"]
+
+        # Create updated extraction
+        extraction_data = {
+            "id": extraction_id,
+            "document_id": document_id,
+            "collection_ids": kwargs.get(
+                "collection_ids", existing_chunk["collection_ids"]
+            ),
+            "user_id": existing_chunk["user_id"],
+            "data": text or existing_chunk["text"],
+            "metadata": merged_metadata,
+        }
+
+        extraction = DocumentExtraction(**extraction_data).model_dump()
+
+        embedding_generator = await self.embed_document([extraction])
+        embeddings = [
+            embedding.model_dump() async for embedding in embedding_generator
+        ]
+
+        storage_generator = await self.store_embeddings(embeddings)
+        async for _ in storage_generator:
+            pass
+
+        return extraction
+
     async def _get_enriched_chunk_text(
         self,
         chunk_idx: int,
@@ -387,7 +459,21 @@ class IngestionService(Service):
                     for neighbor in semantic_neighbors
                 )
 
-        context_chunk_ids = list(set(context_chunk_ids))
+        # weird behavior, sometimes we get UUIDs
+        # FIXME: figure out why
+        context_chunk_ids_str = list(
+            set(
+                [
+                    str(context_chunk_id)
+                    for context_chunk_id in context_chunk_ids
+                ]
+            )
+        )
+
+        context_chunk_ids_uuid = [
+            UUID(context_chunk_id)
+            for context_chunk_id in context_chunk_ids_str
+        ]
 
         context_chunk_texts = [
             (
@@ -396,7 +482,7 @@ class IngestionService(Service):
                     "chunk_order"
                 ],
             )
-            for context_chunk_id in context_chunk_ids
+            for context_chunk_id in context_chunk_ids_uuid
         ]
 
         # sort by chunk_order
@@ -407,7 +493,7 @@ class IngestionService(Service):
             updated_chunk_text = (
                 (
                     await self.providers.llm.aget_completion(
-                        messages=await self.providers.prompt._get_message_payload(
+                        messages=await self.providers.database.prompt_handler.get_message_payload(
                             task_prompt_name="chunk_enrichment",
                             task_inputs={
                                 "context_chunks": "\n".join(
@@ -451,13 +537,13 @@ class IngestionService(Service):
             metadata=chunk["metadata"],
         )
 
-    async def chunk_enrichment(self, document_id: UUID) -> int:
+    async def chunk_enrichment(
+        self,
+        document_id: UUID,
+        chunk_enrichment_settings: ChunkEnrichmentSettings,
+    ) -> int:
         # just call the pipe on every chunk of the document
 
-        # TODO: Why is the config not recognized as an ingestionconfig but as a providerconfig?
-        chunk_enrichment_settings = (
-            self.providers.ingestion.config.chunk_enrichment_settings  # type: ignore
-        )
         # get all document_chunks
         document_chunks = (
             await self.providers.database.get_document_chunks(
@@ -509,6 +595,40 @@ class IngestionService(Service):
 
         return len(new_vector_entries)
 
+    async def update_document_metadata(
+        self,
+        document_id: UUID,
+        metadata: dict,
+        user: UserResponse,
+    ) -> None:
+        # Verify document exists and user has access
+        existing_document = (
+            await self.providers.database.get_documents_overview(
+                filter_document_ids=[document_id],
+                filter_user_ids=[user.id],
+            )
+        )
+
+        if not existing_document["results"]:
+            raise R2RException(
+                status_code=404,
+                message=f"Document with id {document_id} not found or you don't have access.",
+            )
+
+        existing_document = existing_document["results"][0]
+
+        # Merge metadata
+        merged_metadata = {
+            **existing_document.metadata,  # type: ignore
+            **metadata,
+        }
+
+        # Update document metadata
+        existing_document.metadata = merged_metadata  # type: ignore
+        await self.providers.database.upsert_documents_overview(
+            existing_document  # type: ignore
+        )
+
 
 class IngestionServiceAdapter:
     @staticmethod
@@ -550,6 +670,7 @@ class IngestionServiceAdapter:
             "is_update": data.get("is_update", False),
             "file_data": data["file_data"],
             "size_in_bytes": data["size_in_bytes"],
+            "collection_ids": data.get("collection_ids", []),
         }
 
     @staticmethod
@@ -559,6 +680,17 @@ class IngestionServiceAdapter:
             "metadata": data["metadata"],
             "document_id": data["document_id"],
             "chunks": [RawChunk.from_dict(chunk) for chunk in data["chunks"]],
+        }
+
+    @staticmethod
+    def parse_update_chunk_input(data: dict) -> dict:
+        return {
+            "user": IngestionServiceAdapter._parse_user_data(data["user"]),
+            "document_id": UUID(data["document_id"]),
+            "extraction_id": UUID(data["extraction_id"]),
+            "text": data["text"],
+            "metadata": data.get("metadata"),
+            "collection_ids": data.get("collection_ids", []),
         }
 
     @staticmethod
@@ -579,6 +711,7 @@ class IngestionServiceAdapter:
             "index_method": IndexMethod(data["index_method"]),
             "index_measure": IndexMeasure(data["index_measure"]),
             "index_name": data["index_name"],
+            "index_column": data["index_column"],
             "index_arguments": data["index_arguments"],
             "concurrently": data["concurrently"],
         }
@@ -600,4 +733,12 @@ class IngestionServiceAdapter:
         return {
             "index_name": input_data["index_name"],
             "table_name": input_data.get("table_name"),
+        }
+
+    @staticmethod
+    def parse_update_document_metadata_input(data: dict) -> dict:
+        return {
+            "document_id": data["document_id"],
+            "metadata": data["metadata"],
+            "user": IngestionServiceAdapter._parse_user_data(data["user"]),
         }

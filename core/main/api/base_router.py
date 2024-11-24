@@ -1,14 +1,17 @@
 import functools
 import logging
 from abc import abstractmethod
-from typing import Callable, Optional
+from typing import Callable, Union
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from core.base import R2RException, manage_run
-from core.base.logging.base import RunType
-from core.base.providers import OrchestrationProvider
+from core.base.logger.base import RunType
+from core.providers import (
+    HatchetOrchestrationProvider,
+    SimpleOrchestrationProvider,
+)
 
 from ..services.base import Service
 
@@ -19,7 +22,9 @@ class BaseRouter:
     def __init__(
         self,
         service: "Service",
-        orchestration_provider: OrchestrationProvider,
+        orchestration_provider: Union[
+            HatchetOrchestrationProvider, SimpleOrchestrationProvider
+        ],
         run_type: RunType = RunType.UNSPECIFIED,
     ):
         self.service = service
@@ -60,14 +65,8 @@ class BaseRouter:
                         return results
                     return {"results": results, **outer_kwargs}
 
-                except R2RException as re:
-                    raise HTTPException(
-                        status_code=re.status_code,
-                        detail={
-                            "message": re.message,
-                            "error_type": type(re).__name__,
-                        },
-                    )
+                except R2RException:
+                    raise
 
                 except Exception as e:
 

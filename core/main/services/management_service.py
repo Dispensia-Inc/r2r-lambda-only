@@ -1,9 +1,12 @@
 import logging
+import os
 from collections import defaultdict
+from importlib.metadata import version as get_version
 from typing import Any, BinaryIO, Dict, Optional, Tuple, Union
 from uuid import UUID
 
 import toml
+from fastapi.responses import StreamingResponse
 
 from core.base import (
     AnalysisTypes,
@@ -14,12 +17,12 @@ from core.base import (
     Message,
     Prompt,
     R2RException,
-    R2RLoggingProvider,
     RunManager,
-    RunType,
     UserResponse,
 )
+from core.base.logger.base import RunType
 from core.base.utils import validate_uuid
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 from core.telemetry.telemetry_decorator import telemetry_event
 
 from ..abstractions import R2RAgents, R2RPipelines, R2RPipes, R2RProviders
@@ -38,7 +41,7 @@ class ManagementService(Service):
         pipelines: R2RPipelines,
         agents: R2RAgents,
         run_manager: RunManager,
-        logging_connection: R2RLoggingProvider,
+        logging_connection: SqlitePersistentLoggingProvider,
     ):
         super().__init__(
             config,
@@ -190,12 +193,14 @@ class ManagementService(Service):
 
     @telemetry_event("AppSettings")
     async def app_settings(self, *args: Any, **kwargs: Any):
-        prompts = self.providers.prompt.get_all_prompts()
+        prompts = await self.providers.database.get_all_prompts()
         config_toml = self.config.to_toml()
         config_dict = toml.loads(config_toml)
         return {
             "config": config_dict,
             "prompts": prompts,
+            "r2r_project_name": os.environ["R2R_PROJECT_NAME"],
+            # "r2r_version": get_version("r2r"),
         }
 
     @telemetry_event("UsersOverview")
@@ -230,7 +235,12 @@ class ManagementService(Service):
         """
 
         def validate_filters(filters: dict[str, Any]) -> None:
-            ALLOWED_FILTERS = {"document_id", "user_id", "collection_ids"}
+            ALLOWED_FILTERS = {
+                "document_id",
+                "user_id",
+                "collection_ids",
+                "extraction_id",
+            }
 
             if not filters:
                 raise R2RException(
@@ -244,7 +254,7 @@ class ManagementService(Service):
                         message=f"Invalid filter field: {field}",
                     )
 
-            for field in ["document_id", "user_id"]:
+            for field in ["document_id", "user_id", "extraction_id"]:
                 if field in filters:
                     op = next(iter(filters[field].keys()))
                     try:
@@ -280,12 +290,9 @@ class ManagementService(Service):
         document_ids_to_purge: set[UUID] = set()
         if vector_delete_results:
             document_ids_to_purge.update(
-                UUID(doc_id)
-                for doc_id in (
-                    result.get("document_id")
-                    for result in vector_delete_results.values()
-                )
-                if doc_id
+                UUID(result.get("document_id"))
+                for result in vector_delete_results.values()
+                if result.get("document_id")
             )
 
         relational_filters = {}
@@ -300,38 +307,47 @@ class ManagementService(Service):
                 filters["collection_ids"]["$in"]
             )
 
-        try:
-            documents_overview = (
-                await self.providers.database.get_documents_overview(
-                    **relational_filters  # type: ignore
-                )
-            )["results"]
-        except Exception as e:
-            logger.error(
-                f"Error fetching documents from relational database: {e}"
-            )
-            documents_overview = []
-
-        if documents_overview:
-            document_ids_to_purge.update(doc.id for doc in documents_overview)
-
-        if not document_ids_to_purge:
-            raise R2RException(
-                status_code=404, message="No entries found for deletion."
-            )
-
-        for document_id in document_ids_to_purge:
+        if relational_filters:
             try:
-                await self.providers.database.delete_from_documents_overview(
-                    document_id
-                )
-                logger.info(
-                    f"Deleted document ID {document_id} from documents_overview."
-                )
+                documents_overview = (
+                    await self.providers.database.get_documents_overview(
+                        **relational_filters  # type: ignore
+                    )
+                )["results"]
             except Exception as e:
                 logger.error(
-                    f"Error deleting document ID {document_id} from documents_overview: {e}"
+                    f"Error fetching documents from relational database: {e}"
                 )
+                documents_overview = []
+
+            if documents_overview:
+                document_ids_to_purge.update(
+                    doc.id for doc in documents_overview
+                )
+
+            if not document_ids_to_purge:
+                raise R2RException(
+                    status_code=404, message="No entries found for deletion."
+                )
+
+            for document_id in document_ids_to_purge:
+                remaining_chunks = (
+                    await self.providers.database.get_document_chunks(
+                        document_id
+                    )
+                )
+                if remaining_chunks["total_entries"] == 0:
+                    try:
+                        await self.providers.database.delete_from_documents_overview(
+                            document_id
+                        )
+                        logger.info(
+                            f"Deleted document ID {document_id} from documents_overview."
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error deleting document ID {document_id} from documents_overview: {e}"
+                        )
 
         return None
 
@@ -339,7 +355,7 @@ class ManagementService(Service):
     async def download_file(
         self, document_id: UUID
     ) -> Optional[Tuple[str, BinaryIO, int]]:
-        if result := await self.providers.file.retrieve_file(document_id):
+        if result := await self.providers.database.retrieve_file(document_id):
             return result
         return None
 
@@ -401,7 +417,7 @@ class ManagementService(Service):
         await self.providers.database.remove_document_from_collection_vector(
             document_id, collection_id
         )
-        await self.providers.kg.delete_node_via_document_id(
+        await self.providers.database.delete_node_via_document_id(
             document_id, collection_id
         )
         return None
@@ -600,7 +616,9 @@ class ManagementService(Service):
         self, name: str, template: str, input_types: dict[str, str]
     ) -> dict:
         try:
-            await self.providers.prompt.add_prompt(name, template, input_types)
+            await self.providers.database.add_prompt(
+                name, template, input_types
+            )
             return {"message": f"Prompt '{name}' added successfully."}
         except ValueError as e:
             raise R2RException(status_code=400, message=str(e))
@@ -615,7 +633,7 @@ class ManagementService(Service):
         try:
             return {
                 "message": (
-                    await self.providers.prompt.get_prompt(
+                    await self.providers.database.get_prompt(
                         prompt_name, inputs, prompt_override
                     )
                 )
@@ -625,7 +643,7 @@ class ManagementService(Service):
 
     @telemetry_event("GetAllPrompts")
     async def get_all_prompts(self) -> dict[str, Prompt]:
-        return self.providers.prompt.get_all_prompts()
+        return await self.providers.database.get_all_prompts()
 
     @telemetry_event("UpdatePrompt")
     async def update_prompt(
@@ -635,7 +653,7 @@ class ManagementService(Service):
         input_types: Optional[dict[str, str]] = None,
     ) -> dict:
         try:
-            await self.providers.prompt.update_prompt(
+            await self.providers.database.update_prompt(
                 name, template, input_types
             )
             return {"message": f"Prompt '{name}' updated successfully."}
@@ -645,7 +663,7 @@ class ManagementService(Service):
     @telemetry_event("DeletePrompt")
     async def delete_prompt(self, name: str) -> dict:
         try:
-            await self.providers.prompt.delete_prompt(name)
+            await self.providers.database.delete_prompt(name)
             return {"message": f"Prompt '{name}' deleted successfully."}
         except ValueError as e:
             raise R2RException(status_code=404, message=str(e))
@@ -656,25 +674,38 @@ class ManagementService(Service):
         conversation_id: str,
         branch_id: Optional[str] = None,
         auth_user=None,
-    ) -> list[dict]:
+    ) -> Tuple[str, list[Message]]:
         return await self.logging_connection.get_conversation(
             conversation_id, branch_id
         )
 
+    async def verify_conversation_access(
+        self, conversation_id: str, user_id: UUID
+    ) -> bool:
+        return await self.logging_connection.verify_conversation_access(
+            conversation_id, user_id
+        )
+
     @telemetry_event("CreateConversation")
-    async def create_conversation(self, auth_user=None) -> str:
-        return await self.logging_connection.create_conversation()
+    async def create_conversation(
+        self, user_id: Optional[UUID] = None, auth_user=None
+    ) -> str:
+        return await self.logging_connection.create_conversation(
+            user_id=user_id
+        )
 
     @telemetry_event("ConversationsOverview")
     async def conversations_overview(
         self,
         conversation_ids: Optional[list[UUID]] = None,
+        user_ids: Optional[UUID | list[UUID]] = None,
         offset: int = 0,
         limit: int = 100,
         auth_user=None,
-    ) -> list[Dict]:
+    ) -> dict[str, Union[list[dict], int]]:
         return await self.logging_connection.get_conversations_overview(
             conversation_ids=conversation_ids,
+            user_ids=user_ids,
             offset=offset,
             limit=limit,
         )
@@ -698,6 +729,22 @@ class ManagementService(Service):
     ) -> Tuple[str, str]:
         return await self.logging_connection.edit_message(
             message_id, new_content
+        )
+
+    @telemetry_event("updateMessageMetadata")
+    async def update_message_metadata(
+        self, message_id: str, metadata: dict, auth_user=None
+    ):
+        await self.logging_connection.update_message_metadata(
+            message_id, metadata
+        )
+
+    @telemetry_event("exportMessagesToCSV")
+    async def export_messages_to_csv(
+        self, chunk_size: int = 1000, return_type: str = "stream"
+    ) -> Union[StreamingResponse, str]:
+        return await self.logging_connection.export_messages_to_csv(
+            chunk_size, return_type
         )
 
     @telemetry_event("BranchesOverview")

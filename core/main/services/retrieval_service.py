@@ -3,21 +3,24 @@ import logging
 import time
 from typing import Optional
 from uuid import UUID
+from fastapi import HTTPException
 
 from core import R2RStreamingRAGAgent
 from core.base import (
+    DocumentSearchSettings,
+    EmbeddingPurpose,
     GenerationConfig,
     KGSearchSettings,
     Message,
     R2RException,
-    R2RLoggingProvider,
     RunManager,
-    RunType,
     VectorSearchSettings,
     manage_run,
     to_async_generator,
 )
 from core.base.api.models import RAGResponse, SearchResponse, UserResponse
+from core.base.logger.base import RunType
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 from core.telemetry.telemetry_decorator import telemetry_event
 
 from ..abstractions import R2RAgents, R2RPipelines, R2RPipes, R2RProviders
@@ -36,7 +39,7 @@ class RetrievalService(Service):
         pipelines: R2RPipelines,
         agents: R2RAgents,
         run_manager: RunManager,
-        logging_connection: R2RLoggingProvider,
+        logging_connection: SqlitePersistentLoggingProvider,
     ):
         super().__init__(
             config,
@@ -59,10 +62,9 @@ class RetrievalService(Service):
     ) -> SearchResponse:
         async with manage_run(self.run_manager, RunType.RETRIEVAL) as run_id:
             t0 = time.time()
-
             if (
                 kg_search_settings.use_kg_search
-                and self.config.kg.provider is None
+                and self.config.database.kg_search_settings is False
             ):
                 raise R2RException(
                     status_code=400,
@@ -114,6 +116,18 @@ class RetrievalService(Service):
             )
 
             return results.as_dict()
+
+    @telemetry_event("SearchDocuments")
+    async def search_documents(
+        self,
+        query: str,
+        settings: DocumentSearchSettings,
+    ) -> list[dict]:
+
+        return await self.providers.database.search_documents(
+            query_text=query,
+            settings=settings,
+        )
 
     @telemetry_event("Completion")
     async def completion(
@@ -190,12 +204,12 @@ class RetrievalService(Service):
             except Exception as e:
                 logger.error(f"Pipeline error: {str(e)}")
                 if "NoneType" in str(e):
-                    raise R2RException(
+                    raise HTTPException(
                         status_code=502,
-                        message="Remote server not reachable or returned an invalid response",
+                        detail="Remote server not reachable or returned an invalid response",
                     ) from e
-                raise R2RException(
-                    status_code=500, message="Internal Server Error"
+                raise HTTPException(
+                    status_code=500, detail="Internal Server Error"
                 ) from e
 
     async def stream_rag_response(
@@ -268,6 +282,11 @@ class RetrievalService(Service):
                 ids = None
 
                 if not messages:
+                    if not message:
+                        raise R2RException(
+                            status_code=400,
+                            message="Message not provided",
+                        )
                     # Fetch or create conversation
                     if conversation_id:
                         conversation = (
@@ -283,7 +302,7 @@ class RetrievalService(Service):
                                 status_code=404,
                                 message=f"Conversation not found: {conversation_id}",
                             )
-                        messages = [conv[1] for conv in conversation] + [
+                        messages = [conv[1] for conv in conversation] + [  # type: ignore
                             message
                         ]
                         ids = [conv[0] for conv in conversation]
@@ -307,7 +326,7 @@ class RetrievalService(Service):
                                 )
                             )
 
-                current_message = messages[-1]
+                current_message = messages[-1]  # type: ignore
 
                 # Save the new message to the conversation
                 message_id = await self.logging_connection.add_message(
@@ -329,8 +348,8 @@ class RetrievalService(Service):
                     async def stream_response():
                         async with manage_run(self.run_manager, "rag_agent"):
                             agent = R2RStreamingRAGAgent(
+                                database_provider=self.providers.database,
                                 llm_provider=self.providers.llm,
-                                prompt_provider=self.providers.prompt,
                                 config=self.config.agent,
                                 search_pipeline=self.pipelines.search_pipeline,
                             )
@@ -380,12 +399,13 @@ class RetrievalService(Service):
             except Exception as e:
                 logger.error(f"Pipeline error: {str(e)}")
                 if "NoneType" in str(e):
-                    raise R2RException(
+                    raise HTTPException(
                         status_code=502,
-                        message="Server not reachable or returned an invalid response",
+                        detail="Server not reachable or returned an invalid response",
                     )
-                raise R2RException(
-                    status_code=500, message="Internal Server Error"
+                raise HTTPException(
+                    status_code=500,
+                    detail="Internal Server Error",
                 )
 
 

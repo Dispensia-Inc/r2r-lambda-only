@@ -7,18 +7,20 @@ from .database import (
     DatabaseConnectionManager,
     DatabaseProvider,
     DocumentHandler,
+    FileHandler,
+    KGHandler,
+    LoggingHandler,
     PostgresConfigurationSettings,
+    PromptHandler,
     TokenHandler,
     UserHandler,
     VectorHandler,
 )
+from .email import EmailConfig, EmailProvider
 from .embedding import EmbeddingConfig, EmbeddingProvider
-from .file import FileConfig, FileProvider
 from .ingestion import ChunkingStrategy, IngestionConfig, IngestionProvider
-from .kg import KGConfig, KGProvider
 from .llm import CompletionConfig, CompletionProvider
 from .orchestration import OrchestrationConfig, OrchestrationProvider, Workflow
-from .prompt import PromptConfig, PromptProvider
 
 __all__ = [
     # Auth provider
@@ -35,22 +37,26 @@ __all__ = [
     # Crypto provider
     "CryptoConfig",
     "CryptoProvider",
+    # Email provider
+    "EmailConfig",
+    "EmailProvider",
     # Database providers
     "DatabaseConnectionManager",
     "DocumentHandler",
     "CollectionHandler",
     "TokenHandler",
     "UserHandler",
+    "LoggingHandler",
     "VectorHandler",
+    "KGHandler",
+    "PromptHandler",
+    "FileHandler",
     "DatabaseConfig",
     "PostgresConfigurationSettings",
     "DatabaseProvider",
     # Embedding provider
     "EmbeddingConfig",
     "EmbeddingProvider",
-    # Knowledge Graph provider
-    "KGConfig",
-    "KGProvider",
     # LLM provider
     "CompletionConfig",
     "CompletionProvider",
@@ -58,10 +64,4 @@ __all__ = [
     "OrchestrationConfig",
     "OrchestrationProvider",
     "Workflow",
-    # Prompt provider
-    "PromptConfig",
-    "PromptProvider",
-    # File provider
-    "FileConfig",
-    "FileProvider",
 ]

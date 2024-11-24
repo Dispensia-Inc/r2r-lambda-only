@@ -6,18 +6,19 @@ import uuid
 from typing import Any, Optional, Tuple, TypedDict, Union
 from uuid import UUID
 
+import numpy as np
+
 from core.base import (
-    VectorEntry,
-    VectorHandler,
-    VectorQuantizationType,
-    VectorSearchResult,
-)
-from core.base.abstractions import VectorSearchSettings
-from shared.abstractions.vector import (
+    DocumentSearchSettings,
     IndexArgsHNSW,
     IndexArgsIVFFlat,
     IndexMeasure,
     IndexMethod,
+    VectorEntry,
+    VectorHandler,
+    VectorQuantizationType,
+    VectorSearchResult,
+    VectorSearchSettings,
     VectorTableName,
 )
 
@@ -25,7 +26,16 @@ from .base import PostgresConnectionManager
 from .vecs.exc import ArgError, FilterError
 
 logger = logging.getLogger()
-from shared.utils import _decorate_vector_type
+from core.base.utils import _decorate_vector_type
+
+
+def psql_quote_literal(value: str) -> str:
+    """
+    Safely quote a string literal for PostgreSQL to prevent SQL injection.
+    This is a simple implementation - in production, you should use proper parameterization
+    or your database driver's quoting functions.
+    """
+    return "'" + value.replace("'", "''") + "'"
 
 
 def index_measure_to_ops(
@@ -33,6 +43,33 @@ def index_measure_to_ops(
     quantization_type: VectorQuantizationType = VectorQuantizationType.FP32,
 ):
     return _decorate_vector_type(measure.ops, quantization_type)
+
+
+def quantize_vector_to_binary(
+    vector: Union[list[float], np.ndarray], threshold: float = 0.0
+) -> bytes:
+    """
+    Quantizes a float vector to a binary vector string for PostgreSQL bit type.
+    Used when quantization_type is INT1.
+
+    Args:
+        vector (Union[List[float], np.ndarray]): Input vector of floats
+        threshold (float, optional): Threshold for binarization. Defaults to 0.0.
+
+    Returns:
+        str: Binary string representation for PostgreSQL bit type
+    """
+    # Convert input to numpy array if it isn't already
+    if not isinstance(vector, np.ndarray):
+        vector = np.array(vector)
+
+    # Convert to binary (1 where value > threshold, 0 otherwise)
+    binary_vector = (vector > threshold).astype(int)
+
+    # Convert to string of 1s and 0s
+    # Convert to string of 1s and 0s, then to bytes
+    binary_string = "".join(map(str, binary_vector))
+    return binary_string.encode("ascii")
 
 
 class HybridSearchIntermediateResult(TypedDict):
@@ -57,13 +94,15 @@ class PostgresVectorHandler(VectorHandler):
         project_name: str,
         connection_manager: PostgresConnectionManager,
         dimension: int,
+        quantization_type: VectorQuantizationType,
         enable_fts: bool = False,
     ):
         super().__init__(project_name, connection_manager)
         self.dimension = dimension
+        self.quantization_type = quantization_type
         self.enable_fts = enable_fts
 
-    async def create_table(self):
+    async def create_tables(self):
         # Check for old table name first
         check_query = f"""
         SELECT EXISTS (
@@ -84,8 +123,12 @@ class PostgresVectorHandler(VectorHandler):
                 "your database schema to the new version."
             )
 
-        # TODO - Move ids to `UUID` type
-        # Create the vector table if it doesn't exist
+        binary_col = (
+            ""
+            if self.quantization_type != VectorQuantizationType.INT1
+            else f"vec_binary bit({self.dimension}),"
+        )
+
         query = f"""
         CREATE TABLE IF NOT EXISTS {self._get_table_name(PostgresVectorHandler.TABLE_NAME)} (
             extraction_id UUID PRIMARY KEY,
@@ -93,6 +136,7 @@ class PostgresVectorHandler(VectorHandler):
             user_id UUID,
             collection_ids UUID[],
             vec vector({self.dimension}),
+            {binary_col}
             text TEXT,
             metadata JSONB
             {",fts tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED" if self.enable_fts else ""}
@@ -110,57 +154,134 @@ class PostgresVectorHandler(VectorHandler):
         await self.connection_manager.execute_query(query)
 
     async def upsert(self, entry: VectorEntry) -> None:
-        query = f"""
-        INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
-        (extraction_id, document_id, user_id, collection_ids, vec, text, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (extraction_id) DO UPDATE SET
-        document_id = EXCLUDED.document_id,
-        user_id = EXCLUDED.user_id,
-        collection_ids = EXCLUDED.collection_ids,
-        vec = EXCLUDED.vec,
-        text = EXCLUDED.text,
-        metadata = EXCLUDED.metadata;
         """
-        await self.connection_manager.execute_query(
-            query,
-            (
-                entry.extraction_id,
-                entry.document_id,
-                entry.user_id,
-                entry.collection_ids,
-                str(entry.vector.data),
-                entry.text,
-                json.dumps(entry.metadata),
-            ),
-        )
+        Upsert function that handles vector quantization only when quantization_type is INT1.
+        Matches the table schema where vec_binary column only exists for INT1 quantization.
+        """
+        # Check the quantization type to determine which columns to use
+        if self.quantization_type == VectorQuantizationType.INT1:
+            # For quantized vectors, use vec_binary column
+            query = f"""
+            INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+            (extraction_id, document_id, user_id, collection_ids, vec, vec_binary, text, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6::bit({self.dimension}), $7, $8)
+            ON CONFLICT (extraction_id) DO UPDATE SET
+            document_id = EXCLUDED.document_id,
+            user_id = EXCLUDED.user_id,
+            collection_ids = EXCLUDED.collection_ids,
+            vec = EXCLUDED.vec,
+            vec_binary = EXCLUDED.vec_binary,
+            text = EXCLUDED.text,
+            metadata = EXCLUDED.metadata;
+            """
+            await self.connection_manager.execute_query(
+                query,
+                (
+                    entry.extraction_id,
+                    entry.document_id,
+                    entry.user_id,
+                    entry.collection_ids,
+                    str(entry.vector.data),
+                    quantize_vector_to_binary(
+                        entry.vector.data
+                    ),  # Convert to binary
+                    entry.text,
+                    json.dumps(entry.metadata),
+                ),
+            )
+        else:
+            # For regular vectors, use vec column only
+            query = f"""
+            INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+            (extraction_id, document_id, user_id, collection_ids, vec, text, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (extraction_id) DO UPDATE SET
+            document_id = EXCLUDED.document_id,
+            user_id = EXCLUDED.user_id,
+            collection_ids = EXCLUDED.collection_ids,
+            vec = EXCLUDED.vec,
+            text = EXCLUDED.text,
+            metadata = EXCLUDED.metadata;
+            """
+
+            await self.connection_manager.execute_query(
+                query,
+                (
+                    entry.extraction_id,
+                    entry.document_id,
+                    entry.user_id,
+                    entry.collection_ids,
+                    str(entry.vector.data),
+                    entry.text,
+                    json.dumps(entry.metadata),
+                ),
+            )
 
     async def upsert_entries(self, entries: list[VectorEntry]) -> None:
-        query = f"""
-        INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
-        (extraction_id, document_id, user_id, collection_ids, vec, text, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (extraction_id) DO UPDATE SET
-        document_id = EXCLUDED.document_id,
-        user_id = EXCLUDED.user_id,
-        collection_ids = EXCLUDED.collection_ids,
-        vec = EXCLUDED.vec,
-        text = EXCLUDED.text,
-        metadata = EXCLUDED.metadata;
         """
-        params = [
-            (
-                entry.extraction_id,
-                entry.document_id,
-                entry.user_id,
-                entry.collection_ids,
-                str(entry.vector.data),
-                entry.text,
-                json.dumps(entry.metadata),
-            )
-            for entry in entries
-        ]
-        await self.connection_manager.execute_many(query, params)
+        Batch upsert function that handles vector quantization only when quantization_type is INT1.
+        Matches the table schema where vec_binary column only exists for INT1 quantization.
+        """
+        if self.quantization_type == VectorQuantizationType.INT1:
+            # For quantized vectors, use vec_binary column
+            query = f"""
+            INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+            (extraction_id, document_id, user_id, collection_ids, vec, vec_binary, text, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6::bit({self.dimension}), $7, $8)
+            ON CONFLICT (extraction_id) DO UPDATE SET
+            document_id = EXCLUDED.document_id,
+            user_id = EXCLUDED.user_id,
+            collection_ids = EXCLUDED.collection_ids,
+            vec = EXCLUDED.vec,
+            vec_binary = EXCLUDED.vec_binary,
+            text = EXCLUDED.text,
+            metadata = EXCLUDED.metadata;
+            """
+            bin_params = [
+                (
+                    entry.extraction_id,
+                    entry.document_id,
+                    entry.user_id,
+                    entry.collection_ids,
+                    str(entry.vector.data),
+                    quantize_vector_to_binary(
+                        entry.vector.data
+                    ),  # Convert to binary
+                    entry.text,
+                    json.dumps(entry.metadata),
+                )
+                for entry in entries
+            ]
+            await self.connection_manager.execute_many(query, bin_params)
+
+        else:
+            # For regular vectors, use vec column only
+            query = f"""
+            INSERT INTO {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+            (extraction_id, document_id, user_id, collection_ids, vec, text, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (extraction_id) DO UPDATE SET
+            document_id = EXCLUDED.document_id,
+            user_id = EXCLUDED.user_id,
+            collection_ids = EXCLUDED.collection_ids,
+            vec = EXCLUDED.vec,
+            text = EXCLUDED.text,
+            metadata = EXCLUDED.metadata;
+            """
+            params = [
+                (
+                    entry.extraction_id,
+                    entry.document_id,
+                    entry.user_id,
+                    entry.collection_ids,
+                    str(entry.vector.data),
+                    entry.text,
+                    json.dumps(entry.metadata),
+                )
+                for entry in entries
+            ]
+
+            await self.connection_manager.execute_many(query, params)
 
     async def semantic_search(
         self, query_vector: list[float], search_settings: VectorSearchSettings
@@ -179,33 +300,110 @@ class PostgresVectorHandler(VectorHandler):
             f"{table_name}.text",
         ]
 
-        # Use cosine distance calculation
-        distance_calc = f"{table_name}.vec <=> $1::vector"
+        params: list[Union[str, int, bytes]] = []
+        # For binary vectors (INT1), implement two-stage search
+        if self.quantization_type == VectorQuantizationType.INT1:
+            # Convert query vector to binary format
+            binary_query = quantize_vector_to_binary(query_vector)
+            # TODO - Put depth multiplier in config / settings
+            extended_limit = (
+                search_settings.search_limit * 20
+            )  # Get 20x candidates for re-ranking
+            if (
+                imeasure_obj == IndexMeasure.hamming_distance
+                or imeasure_obj == IndexMeasure.jaccard_distance
+            ):
+                binary_search_measure_repr = imeasure_obj.pgvector_repr
+            else:
+                binary_search_measure_repr = (
+                    IndexMeasure.hamming_distance.pgvector_repr
+                )
 
-        if search_settings.include_values:
-            cols.append(f"({distance_calc}) AS distance")
+            # Use binary column and binary-specific distance measures for first stage
+            stage1_distance = f"{table_name}.vec_binary {binary_search_measure_repr} $1::bit({self.dimension})"
+            stage1_param = binary_query
 
-        if search_settings.include_metadatas:
-            cols.append(f"{table_name}.metadata")
+            cols.append(
+                f"{table_name}.vec"
+            )  # Need original vector for re-ranking
+            if search_settings.include_metadatas:
+                cols.append(f"{table_name}.metadata")
 
-        select_clause = ", ".join(cols)
+            select_clause = ", ".join(cols)
+            where_clause = ""
+            params.append(stage1_param)
 
-        where_clause = ""
-        params: list[Union[str, int]] = [str(query_vector)]
-        if search_settings.filters:
-            where_clause = self._build_filters(search_settings.filters, params)
-            where_clause = f"WHERE {where_clause}"
+            if search_settings.filters:
+                where_clause = self._build_filters(
+                    search_settings.filters, params
+                )
+                where_clause = f"WHERE {where_clause}"
 
-        query = f"""
-        SELECT {select_clause}
-        FROM {table_name}
-        {where_clause}
-        ORDER BY {distance_calc}
-        LIMIT ${len(params) + 1}
-        OFFSET ${len(params) + 2}
-        """
+            # First stage: Get candidates using binary search
+            query = f"""
+            WITH candidates AS (
+                SELECT {select_clause},
+                    ({stage1_distance}) as binary_distance
+                FROM {table_name}
+                {where_clause}
+                ORDER BY {stage1_distance}
+                LIMIT ${len(params) + 1}
+                OFFSET ${len(params) + 2}
+            )
+            -- Second stage: Re-rank using original vectors
+            SELECT
+                extraction_id,
+                document_id,
+                user_id,
+                collection_ids,
+                text,
+                {"metadata," if search_settings.include_metadatas else ""}
+                (vec <=> ${len(params) + 4}::vector({self.dimension})) as distance
+            FROM candidates
+            ORDER BY distance
+            LIMIT ${len(params) + 3}
+            """
 
-        params.extend([search_settings.search_limit, search_settings.offset])
+            params.extend(
+                [
+                    extended_limit,  # First stage limit
+                    search_settings.offset,
+                    search_settings.search_limit,  # Final limit
+                    str(query_vector),  # For re-ranking
+                ]
+            )
+
+        else:
+            # Standard float vector handling - unchanged from original
+            distance_calc = f"{table_name}.vec {search_settings.index_measure.pgvector_repr} $1::vector({self.dimension})"
+            query_param = str(query_vector)
+
+            if search_settings.include_values:
+                cols.append(f"({distance_calc}) AS distance")
+            if search_settings.include_metadatas:
+                cols.append(f"{table_name}.metadata")
+
+            select_clause = ", ".join(cols)
+            where_clause = ""
+            params.append(query_param)
+
+            if search_settings.filters:
+                where_clause = self._build_filters(
+                    search_settings.filters, params
+                )
+                where_clause = f"WHERE {where_clause}"
+
+            query = f"""
+            SELECT {select_clause}
+            FROM {table_name}
+            {where_clause}
+            ORDER BY {distance_calc}
+            LIMIT ${len(params) + 1}
+            OFFSET ${len(params) + 2}
+            """
+            params.extend(
+                [search_settings.search_limit, search_settings.offset]
+            )
 
         results = await self.connection_manager.fetch_query(query, params)
 
@@ -218,7 +416,7 @@ class PostgresVectorHandler(VectorHandler):
                 text=result["text"],
                 score=(
                     (1 - float(result["distance"]))
-                    if search_settings.include_values
+                    if "distance" in result
                     else -1
                 ),
                 metadata=(
@@ -239,7 +437,7 @@ class PostgresVectorHandler(VectorHandler):
             )
 
         where_clauses = []
-        params: list[Union[str, int]] = [query_text]
+        params: list[Union[str, int, bytes]] = [query_text]
 
         if search_settings.filters:
             filters_clause = self._build_filters(
@@ -402,7 +600,7 @@ class PostgresVectorHandler(VectorHandler):
     async def delete(
         self, filters: dict[str, Any]
     ) -> dict[str, dict[str, str]]:
-        params: list[Union[str, int]] = []
+        params: list[Union[str, int, bytes]] = []
         where_clause = self._build_filters(filters, params)
 
         query = f"""
@@ -479,6 +677,7 @@ class PostgresVectorHandler(VectorHandler):
         SELECT extraction_id, document_id, user_id, collection_ids, text, metadata{vector_select}, COUNT(*) OVER() AS total
         FROM {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
         WHERE document_id = $1
+        ORDER BY (metadata->>'chunk_order')::integer
         OFFSET $2
         {limit_clause};
         """
@@ -508,6 +707,28 @@ class PostgresVectorHandler(VectorHandler):
 
         return {"results": chunks, "total_entries": total}
 
+    async def get_chunk(self, extraction_id: UUID) -> Optional[dict[str, Any]]:
+        query = f"""
+        SELECT extraction_id, document_id, user_id, collection_ids, text, metadata
+        FROM {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+        WHERE extraction_id = $1;
+        """
+
+        result = await self.connection_manager.fetchrow_query(
+            query, (extraction_id,)
+        )
+
+        if result:
+            return {
+                "extraction_id": result["extraction_id"],
+                "document_id": result["document_id"],
+                "user_id": result["user_id"],
+                "collection_ids": result["collection_ids"],
+                "text": result["text"],
+                "metadata": json.loads(result["metadata"]),
+            }
+        return None
+
     async def create_index(
         self,
         table_name: Optional[VectorTableName] = None,
@@ -517,6 +738,7 @@ class PostgresVectorHandler(VectorHandler):
             Union[IndexArgsIVFFlat, IndexArgsHNSW]
         ] = None,
         index_name: Optional[str] = None,
+        index_column: Optional[str] = None,
         concurrently: bool = True,
     ) -> None:
         """
@@ -553,7 +775,17 @@ class PostgresVectorHandler(VectorHandler):
 
         if table_name == VectorTableName.VECTORS:
             table_name_str = f"{self.project_name}.{VectorTableName.VECTORS}"  # TODO - Fix bug in vector table naming convention
-            col_name = "vec"
+            if index_column:
+                col_name = index_column
+            else:
+                col_name = (
+                    "vec"
+                    if (
+                        index_measure != IndexMeasure.hamming_distance
+                        and index_measure != IndexMeasure.jaccard_distance
+                    )
+                    else "vec_binary"
+                )
         elif table_name == VectorTableName.ENTITIES_DOCUMENT:
             table_name_str = (
                 f"{self.project_name}.{VectorTableName.ENTITIES_DOCUMENT}"
@@ -571,6 +803,7 @@ class PostgresVectorHandler(VectorHandler):
             col_name = "embedding"
         else:
             raise ArgError("invalid table name")
+
         if index_method not in (
             IndexMethod.ivfflat,
             IndexMethod.hnsw,
@@ -613,7 +846,7 @@ class PostgresVectorHandler(VectorHandler):
 
         index_name = (
             index_name
-            or f"ix_{ops}_{index_method}__{time.strftime('%Y%m%d%H%M%S')}"
+            or f"ix_{ops}_{index_method}__{col_name}_{time.strftime('%Y%m%d%H%M%S')}"
         )
 
         create_index_sql = f"""
@@ -640,7 +873,7 @@ class PostgresVectorHandler(VectorHandler):
         return None
 
     def _build_filters(
-        self, filters: dict, parameters: list[Union[str, int]]
+        self, filters: dict, parameters: list[Union[str, int, bytes]]
     ) -> str:
 
         def parse_condition(key: str, value: Any) -> str:  # type: ignore
@@ -963,6 +1196,140 @@ class PostgresVectorHandler(VectorHandler):
             for r in results
         ]
 
+    async def search_documents(
+        self,
+        query_text: str,
+        settings: DocumentSearchSettings,
+    ) -> list[dict[str, Any]]:
+        """
+        Search for documents based on their metadata fields and/or body text.
+        Joins with document_info table to get complete document metadata.
+
+        Args:
+            query_text (str): The search query text
+            settings (DocumentSearchSettings): Search settings including search preferences and filters
+
+        Returns:
+            list[dict[str, Any]]: List of documents with their search scores and complete metadata
+        """
+        where_clauses = []
+        params: list[Union[str, int, bytes]] = [query_text]
+
+        # Build the dynamic metadata field search expression
+        metadata_fields_expr = " || ' ' || ".join(
+            [
+                f"COALESCE(v.metadata->>{psql_quote_literal(key)}, '')"
+                for key in settings.metadata_keys
+            ]
+        )
+
+        query = f"""
+            WITH
+            -- Metadata search scores
+            metadata_scores AS (
+                SELECT DISTINCT ON (v.document_id)
+                    v.document_id,
+                    d.metadata as doc_metadata,
+                    CASE WHEN $1 = '' THEN 0.0
+                    ELSE
+                        ts_rank_cd(
+                            setweight(to_tsvector('english', {metadata_fields_expr}), 'A'),
+                            websearch_to_tsquery('english', $1),
+                            32
+                        )
+                    END as metadata_rank
+                FROM {self._get_table_name(PostgresVectorHandler.TABLE_NAME)} v
+                LEFT JOIN {self._get_table_name('document_info')} d ON v.document_id = d.document_id
+                WHERE v.metadata IS NOT NULL
+            ),
+            -- Body search scores
+            body_scores AS (
+                SELECT
+                    document_id,
+                    AVG(
+                        ts_rank_cd(
+                            setweight(to_tsvector('english', COALESCE(text, '')), 'B'),
+                            websearch_to_tsquery('english', $1),
+                            32
+                        )
+                    ) as body_rank
+                FROM {self._get_table_name(PostgresVectorHandler.TABLE_NAME)}
+                WHERE $1 != ''
+                {f"AND to_tsvector('english', text) @@ websearch_to_tsquery('english', $1)" if settings.search_over_body else ""}
+                GROUP BY document_id
+            ),
+            -- Combined scores with document metadata
+            combined_scores AS (
+                SELECT
+                    COALESCE(m.document_id, b.document_id) as document_id,
+                    m.doc_metadata as metadata,
+                    COALESCE(m.metadata_rank, 0) as debug_metadata_rank,
+                    COALESCE(b.body_rank, 0) as debug_body_rank,
+                    CASE
+                        WHEN {str(settings.search_over_metadata).lower()} AND {str(settings.search_over_body).lower()} THEN
+                            COALESCE(m.metadata_rank, 0) * {settings.metadata_weight} + COALESCE(b.body_rank, 0) * {settings.title_weight}
+                        WHEN {str(settings.search_over_metadata).lower()} THEN
+                            COALESCE(m.metadata_rank, 0)
+                        WHEN {str(settings.search_over_body).lower()} THEN
+                            COALESCE(b.body_rank, 0)
+                        ELSE 0
+                    END as rank
+                FROM metadata_scores m
+                FULL OUTER JOIN body_scores b ON m.document_id = b.document_id
+                WHERE (
+                    ($1 = '') OR
+                    ({str(settings.search_over_metadata).lower()} AND m.metadata_rank > 0) OR
+                    ({str(settings.search_over_body).lower()} AND b.body_rank > 0)
+                )
+        """
+
+        # Add any additional filters
+        if settings.filters:
+            filter_clause = self._build_filters(settings.filters, params)
+            where_clauses.append(filter_clause)
+
+        if where_clauses:
+            query += f" AND {' AND '.join(where_clauses)}"
+
+        query += """
+            )
+            SELECT
+                document_id,
+                metadata,
+                rank as score,
+                debug_metadata_rank,
+                debug_body_rank
+            FROM combined_scores
+            WHERE rank > 0
+            ORDER BY rank DESC
+            OFFSET ${offset_param} LIMIT ${limit_param}
+        """.format(
+            offset_param=len(params) + 1,
+            limit_param=len(params) + 2,
+        )
+
+        # Add offset and limit to params
+        params.extend([settings.offset, settings.limit])
+
+        # Execute query
+        results = await self.connection_manager.fetch_query(query, params)
+
+        # Format results with complete document metadata
+        return [
+            {
+                "document_id": str(r["document_id"]),
+                "metadata": (
+                    json.loads(r["metadata"])
+                    if isinstance(r["metadata"], str)
+                    else r["metadata"]
+                ),
+                "score": float(r["score"]),
+                "debug_metadata_rank": float(r["debug_metadata_rank"]),
+                "debug_body_rank": float(r["debug_body_rank"]),
+            }
+            for r in results
+        ]
+
     def _get_index_options(
         self,
         method: IndexMethod,
@@ -982,28 +1349,3 @@ class PostgresVectorHandler(VectorHandler):
                 return "WITH (m=16, ef_construction=64)"
         else:
             return ""  # No options for other methods
-
-    def _get_index_type(self, method: IndexMethod) -> str:
-        if method == IndexMethod.ivfflat:
-            return "ivfflat"
-        elif method == IndexMethod.hnsw:
-            return "hnsw"
-        elif method == IndexMethod.auto:
-            # Here you might want to implement logic to choose between ivfflat and hnsw
-            return "hnsw"
-
-    def _get_index_operator(self, measure: IndexMeasure) -> str:
-        if measure == IndexMeasure.l2_distance:
-            return "vector_l2_ops"
-        elif measure == IndexMeasure.max_inner_product:
-            return "vector_ip_ops"
-        elif measure == IndexMeasure.cosine_distance:
-            return "vector_cosine_ops"
-
-    def _get_distance_function(self, imeasure_obj: IndexMeasure) -> str:
-        if imeasure_obj == IndexMeasure.cosine_distance:
-            return "<=>"
-        elif imeasure_obj == IndexMeasure.l2_distance:
-            return "l2_distance"
-        elif imeasure_obj == IndexMeasure.max_inner_product:
-            return "max_inner_product"

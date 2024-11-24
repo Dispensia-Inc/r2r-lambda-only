@@ -1,12 +1,13 @@
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 import yaml
 from fastapi import Body, Depends, Query
 
-from core.base import RunType
+from core.base import Workflow
+from core.base.abstractions import EntityLevel, KGRunType
 from core.base.api.models import (
     WrappedKGCommunitiesResponse,
     WrappedKGCreationResponse,
@@ -16,11 +17,15 @@ from core.base.api.models import (
     WrappedKGTriplesResponse,
     WrappedKGTunePromptResponse,
 )
-from core.base.providers import OrchestrationProvider, Workflow
-from core.utils import generate_default_user_collection_id
-from shared.abstractions.graph import EntityLevel
-from shared.abstractions.kg import KGRunType
-from shared.utils.base_utils import update_settings_from_dict
+from core.base.logger.base import RunType
+from core.providers import (
+    HatchetOrchestrationProvider,
+    SimpleOrchestrationProvider,
+)
+from core.utils import (
+    generate_default_user_collection_id,
+    update_settings_from_dict,
+)
 
 from ..services.kg_service import KgService
 from .base_router import BaseRouter
@@ -32,7 +37,9 @@ class KGRouter(BaseRouter):
     def __init__(
         self,
         service: KgService,
-        orchestration_provider: Optional[OrchestrationProvider] = None,
+        orchestration_provider: Optional[
+            Union[HatchetOrchestrationProvider, SimpleOrchestrationProvider]
+        ] = None,
         run_type: RunType = RunType.KG,
     ):
         if not orchestration_provider:
@@ -94,8 +101,9 @@ class KGRouter(BaseRouter):
                 default=None,
                 description="Settings for the graph creation process.",
             ),
+            run_with_orchestration: Optional[bool] = Body(True),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
-        ) -> WrappedKGCreationResponse:  # type: ignore
+        ):  #  -> WrappedKGCreationResponse:  # type: ignore
             """
             Creating a graph on your documents. This endpoint takes input a list of document ids and KGCreationSettings.
             If document IDs are not provided, the graph will be created on all documents in the system.
@@ -119,7 +127,7 @@ class KGRouter(BaseRouter):
 
             # Apply runtime settings overrides
             server_kg_creation_settings = (
-                self.service.providers.kg.config.kg_creation_settings
+                self.service.providers.database.config.kg_creation_settings
             )
 
             if kg_creation_settings:
@@ -132,18 +140,29 @@ class KGRouter(BaseRouter):
                 return await self.service.get_creation_estimate(
                     collection_id, server_kg_creation_settings
                 )
-
-            # Otherwise, create the graph
             else:
-                workflow_input = {
-                    "collection_id": str(collection_id),
-                    "kg_creation_settings": server_kg_creation_settings.model_dump_json(),
-                    "user": auth_user.json(),
-                }
 
-                return await self.orchestration_provider.run_workflow(  # type: ignore
-                    "create-graph", {"request": workflow_input}, {}
-                )
+                # Otherwise, create the graph
+                if run_with_orchestration:
+                    workflow_input = {
+                        "collection_id": str(collection_id),
+                        "kg_creation_settings": server_kg_creation_settings.model_dump_json(),
+                        "user": auth_user.json(),
+                    }
+
+                    return await self.orchestration_provider.run_workflow(  # type: ignore
+                        "create-graph", {"request": workflow_input}, {}
+                    )
+                else:
+                    from core.main.orchestration import simple_kg_factory
+
+                    logger.info("Running create-graph without orchestration.")
+                    simple_kg = simple_kg_factory(self.service)
+                    await simple_kg["create-graph"](workflow_input)
+                    return {
+                        "message": "Graph created successfully.",
+                        "task_id": None,
+                    }
 
         @self.router.post(
             "/enrich_graph",
@@ -162,8 +181,9 @@ class KGRouter(BaseRouter):
                 default=None,
                 description="Settings for the graph enrichment process.",
             ),
+            run_with_orchestration: Optional[bool] = Body(True),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
-        ) -> WrappedKGEnrichmentResponse:
+        ):  # -> WrappedKGEnrichmentResponse:
             """
             This endpoint enriches the graph with additional information.
             It creates communities of nodes based on their similarity and adds embeddings to the graph.
@@ -184,7 +204,7 @@ class KGRouter(BaseRouter):
 
             # Apply runtime settings overrides
             server_kg_enrichment_settings = (
-                self.service.providers.kg.config.kg_enrichment_settings
+                self.service.providers.database.config.kg_enrichment_settings
             )
             if kg_enrichment_settings:
                 server_kg_enrichment_settings = update_settings_from_dict(
@@ -199,32 +219,45 @@ class KGRouter(BaseRouter):
 
             # Otherwise, run the enrichment workflow
             else:
-                workflow_input = {
-                    "collection_id": str(collection_id),
-                    "kg_enrichment_settings": server_kg_enrichment_settings.model_dump_json(),
-                    "user": auth_user.json(),
-                }
+                if run_with_orchestration:
+                    workflow_input = {
+                        "collection_id": str(collection_id),
+                        "kg_enrichment_settings": server_kg_enrichment_settings.model_dump_json(),
+                        "user": auth_user.json(),
+                    }
 
-                return await self.orchestration_provider.run_workflow(  # type: ignore
-                    "enrich-graph", {"request": workflow_input}, {}
-                )
+                    return await self.orchestration_provider.run_workflow(  # type: ignore
+                        "enrich-graph", {"request": workflow_input}, {}
+                    )
+                else:
+                    from core.main.orchestration import simple_kg_factory
+
+                    logger.info("Running enrich-graph without orchestration.")
+                    simple_kg = simple_kg_factory(self.service)
+                    await simple_kg["enrich-graph"](workflow_input)
+                    return {
+                        "message": "Graph enriched successfully.",
+                        "task_id": None,
+                    }
 
         @self.router.get("/entities")
         @self.base_endpoint
         async def get_entities(
+            collection_id: Optional[UUID] = Query(
+                None, description="Collection ID to retrieve entities from."
+            ),
             entity_level: Optional[EntityLevel] = Query(
                 default=EntityLevel.DOCUMENT,
                 description="Type of entities to retrieve. Options are: raw, dedup_document, dedup_collection.",
             ),
-            collection_id: Optional[UUID] = Query(
-                None, description="Collection ID to retrieve entities from."
+            entity_ids: Optional[list[str]] = Query(
+                None, description="Entity IDs to filter by."
             ),
             offset: int = Query(0, ge=0, description="Offset for pagination."),
             limit: int = Query(
-                100, ge=1, le=1000, description="Limit for pagination."
-            ),
-            entity_ids: Optional[list[str]] = Query(
-                None, description="Entity IDs to filter by."
+                100,
+                ge=-1,
+                description="Number of items to return. Use -1 to return all items.",
             ),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedKGEntitiesResponse:
@@ -248,10 +281,10 @@ class KGRouter(BaseRouter):
 
             return await self.service.get_entities(
                 collection_id,
-                offset,
-                limit,
                 entity_ids,
                 entity_table_name,
+                offset,
+                limit,
             )
 
         @self.router.get("/triples")
@@ -260,15 +293,17 @@ class KGRouter(BaseRouter):
             collection_id: Optional[UUID] = Query(
                 None, description="Collection ID to retrieve triples from."
             ),
-            offset: int = Query(0, ge=0, description="Offset for pagination."),
-            limit: int = Query(
-                100, ge=1, le=1000, description="Limit for pagination."
-            ),
             entity_names: Optional[list[str]] = Query(
                 None, description="Entity names to filter by."
             ),
             triple_ids: Optional[list[str]] = Query(
                 None, description="Triple IDs to filter by."
+            ),
+            offset: int = Query(0, ge=0, description="Offset for pagination."),
+            limit: int = Query(
+                100,
+                ge=-1,
+                description="Number of items to return. Use -1 to return all items.",
             ),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedKGTriplesResponse:
@@ -285,10 +320,10 @@ class KGRouter(BaseRouter):
 
             return await self.service.get_triples(
                 collection_id,
-                offset,
-                limit,
                 entity_names,
                 triple_ids,
+                offset,
+                limit,
             )
 
         @self.router.get("/communities")
@@ -297,15 +332,17 @@ class KGRouter(BaseRouter):
             collection_id: Optional[UUID] = Query(
                 None, description="Collection ID to retrieve communities from."
             ),
-            offset: int = Query(0, ge=0, description="Offset for pagination."),
-            limit: int = Query(
-                100, ge=1, le=1000, description="Limit for pagination."
-            ),
             levels: Optional[list[int]] = Query(
                 None, description="Levels to filter by."
             ),
             community_numbers: Optional[list[int]] = Query(
                 None, description="Community numbers to filter by."
+            ),
+            offset: int = Query(0, ge=0, description="Offset for pagination."),
+            limit: int = Query(
+                100,
+                ge=-1,
+                description="Number of items to return. Use -1 to return all items.",
             ),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedKGCommunitiesResponse:
@@ -322,10 +359,10 @@ class KGRouter(BaseRouter):
 
             return await self.service.get_communities(
                 collection_id,
-                offset,
-                limit,
                 levels,
                 community_numbers,
+                offset,
+                limit,
             )
 
         @self.router.post("/deduplicate_entities")
@@ -357,7 +394,7 @@ class KGRouter(BaseRouter):
                 run_type = KGRunType.ESTIMATE
 
             server_deduplication_settings = (
-                self.service.providers.kg.config.kg_entity_deduplication_settings
+                self.service.providers.database.config.kg_entity_deduplication_settings
             )
 
             logger.info(
@@ -437,10 +474,10 @@ class KGRouter(BaseRouter):
         @self.router.delete("/delete_graph_for_collection")
         @self.base_endpoint
         async def delete_graph_for_collection(
-            collection_id: UUID = Body(
+            collection_id: UUID = Body(  # FIXME: This should be a path parameter
                 ..., description="Collection ID to delete graph for."
             ),
-            cascade: bool = Body(
+            cascade: bool = Body(  # FIXME: This should be a query parameter
                 default=False,
                 description="Whether to cascade the deletion, and delete entities and triples belonging to the collection.",
             ),

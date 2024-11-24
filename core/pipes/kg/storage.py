@@ -5,14 +5,13 @@ from uuid import UUID
 
 from core.base import (
     AsyncState,
+    DatabaseProvider,
     EmbeddingProvider,
     KGExtraction,
-    PipeType,
     R2RDocumentProcessingError,
-    R2RLoggingProvider,
 )
 from core.base.pipes.base_pipe import AsyncPipe
-from core.base.providers import KGProvider
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 
 logger = logging.getLogger()
 
@@ -24,11 +23,10 @@ class KGStoragePipe(AsyncPipe):
 
     def __init__(
         self,
-        kg_provider: KGProvider,
+        database_provider: DatabaseProvider,
         config: AsyncPipe.PipeConfig,
+        logging_provider: SqlitePersistentLoggingProvider,
         storage_batch_size: int = 1,
-        pipe_logger: Optional[R2RLoggingProvider] = None,
-        type: PipeType = PipeType.INGESTOR,
         *args,
         **kwargs,
     ):
@@ -41,12 +39,11 @@ class KGStoragePipe(AsyncPipe):
 
         super().__init__(
             config,
-            type,
-            pipe_logger,
+            logging_provider,
             *args,
             **kwargs,
         )
-        self.kg_provider = kg_provider
+        self.database_provider = database_provider
         self.storage_batch_size = storage_batch_size
 
     async def store(
@@ -57,7 +54,7 @@ class KGStoragePipe(AsyncPipe):
         Stores a batch of knowledge graph extractions in the graph database.
         """
         try:
-            await self.kg_provider.add_kg_extractions(kg_extractions)
+            await self.database_provider.add_kg_extractions(kg_extractions)
             return
         except Exception as e:
             error_message = f"Failed to store knowledge graph extractions in the database: {e}"

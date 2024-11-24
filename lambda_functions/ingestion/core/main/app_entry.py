@@ -143,7 +143,7 @@ class CustomMangum(Mangum):
         logger.info("[[ INFO ]] received invoke handler!")
         logger.info(event)
         identification_name = event["headers"]["x-acc-identification-name"]
-        # TODO: ここのidentification_nameで無限にDBスキーマが生成できるのでバリデーションを行う
+        # TODO: 顧客IDのバリデーションを実装する
         os.environ["R2R_PROJECT_NAME"] = identification_name
         logger.info(f"[[ INFO ]] identification_name = {identification_name}")
 

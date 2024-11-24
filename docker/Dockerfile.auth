@@ -16,6 +16,6 @@ COPY lambda_functions/auth/ ./lambda_functions/auth/
 RUN ln -sf  /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
 
 # パッケージインストール
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 CMD ["lambda_functions.auth.core.main.app_entry.handler"]

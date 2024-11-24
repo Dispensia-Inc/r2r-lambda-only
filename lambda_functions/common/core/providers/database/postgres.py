@@ -1,12 +1,12 @@
 import logging
-from typing import Optional
 
 from core.base import (
-    CryptoProvider,
     DatabaseConfig,
     VectorQuantizationType,
 )
+from core.providers import BCryptProvider
 from core.providers.database.postgres import PostgresDBProvider
+
 from .base import CustomSemaphoreConnectionPool
 
 logger = logging.getLogger()
@@ -17,21 +17,19 @@ class CustomPostgresDBProvider(PostgresDBProvider):
         self,
         config: DatabaseConfig,
         dimension: int,
-        crypto_provider: CryptoProvider,
-        quantization_type: Optional[
-            VectorQuantizationType
-        ] = VectorQuantizationType.FP32,
+        crypto_provider: BCryptProvider,
+        quantization_type: VectorQuantizationType = VectorQuantizationType.FP32,
         *args,
         **kwargs,
-        ):
+    ):
         super().__init__(
-            config, 
-            dimension, 
-            crypto_provider, 
-            quantization_type, 
-            *args, 
+            config,
+            dimension,
+            crypto_provider,
+            quantization_type,
+            *args,
             **kwargs
-            )
+        )
 
     async def initialize(self):
         logger.info("Initializing `PostgresDBProvider`.")
@@ -52,8 +50,12 @@ class CustomPostgresDBProvider(PostgresDBProvider):
                 f'CREATE SCHEMA IF NOT EXISTS "{self.project_name}";'
             )
 
-        await self.document_handler.create_table()
-        await self.collection_handler.create_table()
-        await self.token_handler.create_table()
-        await self.user_handler.create_table()
-        await self.vector_handler.create_table()
+        await self.document_handler.create_tables()
+        await self.collection_handler.create_tables()
+        await self.token_handler.create_tables()
+        await self.user_handler.create_tables()
+        await self.vector_handler.create_tables()
+        await self.prompt_handler.create_tables()
+        await self.file_handler.create_tables()
+        await self.kg_handler.create_tables()
+        await self.logging_handler.create_tables()

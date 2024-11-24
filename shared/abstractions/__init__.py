@@ -38,6 +38,7 @@ from .llm import (
 from .prompt import Prompt
 from .search import (
     AggregateSearchResult,
+    DocumentSearchSettings,
     HybridSearchSettings,
     KGCommunityResult,
     KGEntityResult,
@@ -52,10 +53,15 @@ from .search import (
 )
 from .user import Token, TokenData, UserStats
 from .vector import (
+    IndexArgsHNSW,
+    IndexArgsIVFFlat,
+    IndexMeasure,
+    IndexMethod,
     StorageResult,
     Vector,
     VectorEntry,
     VectorQuantizationType,
+    VectorTableName,
     VectorType,
 )
 
@@ -110,6 +116,7 @@ __all__ = [
     "KGSearchSettings",
     "VectorSearchResult",
     "VectorSearchSettings",
+    "DocumentSearchSettings",
     "HybridSearchSettings",
     # KG abstractions
     "KGCreationSettings",
@@ -124,6 +131,11 @@ __all__ = [
     "Vector",
     "VectorEntry",
     "VectorType",
+    "IndexMethod",
+    "IndexMeasure",
+    "IndexArgsIVFFlat",
+    "IndexArgsHNSW",
+    "VectorTableName",
     "VectorQuantizationType",
     "StorageResult",
 ]

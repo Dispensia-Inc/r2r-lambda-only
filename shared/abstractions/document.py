@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
+from typing import ClassVar, Optional, Union
 from uuid import UUID, uuid4
 
 from pydantic import Field
@@ -49,6 +49,8 @@ class DocumentType(str, Enum):
     TIFF = "tiff"
     JPG = "jpg"
     SVG = "svg"
+    WEBP = "webp"
+    ICO = "ico"
 
     # Markdown
     MD = "md"
@@ -95,7 +97,7 @@ class Document(R2RSerializable):
     id: UUID = Field(default_factory=uuid4)
     collection_ids: list[UUID]
     user_id: UUID
-    type: DocumentType
+    document_type: DocumentType
     metadata: dict
 
     class Config:
@@ -121,6 +123,17 @@ class IngestionStatus(str, Enum):
     FAILED = "failed"
     SUCCESS = "success"
 
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def table_name(cls) -> str:
+        return "document_info"
+
+    @classmethod
+    def id_column(cls) -> str:
+        return "document_id"
+
 
 class KGExtractionStatus(str, Enum):
     """Status of KG Creation per document."""
@@ -128,10 +141,19 @@ class KGExtractionStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     SUCCESS = "success"
+    ENRICHED = "enriched"
     FAILED = "failed"
 
     def __str__(self):
         return self.value
+
+    @classmethod
+    def table_name(cls) -> str:
+        return "document_info"
+
+    @classmethod
+    def id_column(cls) -> str:
+        return "document_id"
 
 
 class KGEnrichmentStatus(str, Enum):
@@ -139,11 +161,20 @@ class KGEnrichmentStatus(str, Enum):
 
     PENDING = "pending"
     PROCESSING = "processing"
+    OUTDATED = "outdated"
     SUCCESS = "success"
     FAILED = "failed"
 
     def __str__(self):
         return self.value
+
+    @classmethod
+    def table_name(cls) -> str:
+        return "collections"
+
+    @classmethod
+    def id_column(cls) -> str:
+        return "collection_id"
 
 
 class DocumentInfo(R2RSerializable):
@@ -152,7 +183,7 @@ class DocumentInfo(R2RSerializable):
     id: UUID
     collection_ids: list[UUID]
     user_id: UUID
-    type: DocumentType
+    document_type: DocumentType
     metadata: dict
     title: Optional[str] = None
     version: str
@@ -171,7 +202,7 @@ class DocumentInfo(R2RSerializable):
             "document_id": self.id,
             "collection_ids": self.collection_ids,
             "user_id": self.user_id,
-            "type": self.type,
+            "document_type": self.document_type,
             "metadata": json.dumps(self.metadata),
             "title": self.title or "N/A",
             "version": self.version,

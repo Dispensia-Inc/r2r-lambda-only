@@ -4,16 +4,14 @@ from uuid import UUID
 
 from core.base import (
     AsyncState,
+    DatabaseProvider,
     Document,
     DocumentExtraction,
-    FileProvider,
-    IngestionConfig,
-    PipeType,
-    R2RLoggingProvider,
 )
 from core.base.abstractions import R2RDocumentProcessingError
 from core.base.pipes.base_pipe import AsyncPipe
 from core.base.providers.ingestion import IngestionProvider
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 from core.utils import generate_extraction_id
 
 logger = logging.getLogger()
@@ -25,23 +23,21 @@ class ParsingPipe(AsyncPipe):
 
     def __init__(
         self,
+        database_provider: DatabaseProvider,
         ingestion_provider: IngestionProvider,
-        file_provider: FileProvider,
         config: AsyncPipe.PipeConfig,
-        type: PipeType = PipeType.INGESTOR,
-        pipe_logger: Optional[R2RLoggingProvider] = None,
+        logging_provider: SqlitePersistentLoggingProvider,
         *args,
         **kwargs,
     ):
         super().__init__(
             config,
-            type,
-            pipe_logger,
+            logging_provider,
             *args,
             **kwargs,
         )
+        self.database_provider = database_provider
         self.ingestion_provider = ingestion_provider
-        self.file_provider = file_provider
 
     async def _parse(
         self,
@@ -61,7 +57,9 @@ class ParsingPipe(AsyncPipe):
                 raise ValueError(
                     f"Provider '{override_provider}' does not match ingestion provider '{self.ingestion_provider.config.provider}'."
                 )
-            if result := await self.file_provider.retrieve_file(document.id):
+            if result := await self.database_provider.retrieve_file(
+                document.id
+            ):
                 file_name, file_wrapper, file_size = result
 
             with file_wrapper as file_content_stream:

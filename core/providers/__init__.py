@@ -1,25 +1,24 @@
 from .auth import R2RAuthProvider, SupabaseAuthProvider
 from .crypto import BCryptConfig, BCryptProvider
 from .database import PostgresDBProvider
+from .email import AsyncSMTPEmailProvider, ConsoleMockEmailProvider
 from .embeddings import (
     LiteLLMEmbeddingProvider,
     OllamaEmbeddingProvider,
     OpenAIEmbeddingProvider,
 )
-from .file import PostgresFileProvider
 from .ingestion import (  # type: ignore
     R2RIngestionConfig,
     R2RIngestionProvider,
     UnstructuredIngestionConfig,
     UnstructuredIngestionProvider,
 )
-from .kg import PostgresKGProvider
-from .llm import LiteCompletionProvider, OpenAICompletionProvider
+from .llm import LiteLLMCompletionProvider, OpenAICompletionProvider
+from .logger import SqlitePersistentLoggingProvider
 from .orchestration import (
     HatchetOrchestrationProvider,
     SimpleOrchestrationProvider,
 )
-from .prompts import R2RPromptProvider
 
 __all__ = [
     # Auth
@@ -39,16 +38,15 @@ __all__ = [
     "LiteLLMEmbeddingProvider",
     "OllamaEmbeddingProvider",
     "OpenAIEmbeddingProvider",
-    # File
-    "PostgresFileProvider",
-    # KG
-    "PostgresKGProvider",
+    # Email
+    "AsyncSMTPEmailProvider",
+    "ConsoleMockEmailProvider",
     # Orchestration
     "HatchetOrchestrationProvider",
     "SimpleOrchestrationProvider",
     # LLM
     "OpenAICompletionProvider",
-    "LiteCompletionProvider",
-    # Prompts
-    "R2RPromptProvider",
+    "LiteLLMCompletionProvider",
+    # Logging
+    "SqlitePersistentLoggingProvider",
 ]

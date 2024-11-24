@@ -1,8 +1,15 @@
-from fastapi import FastAPI
+from typing import Union
+
+from core.base import R2RException
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from core.base.providers import OrchestrationProvider
+from core.providers import (
+    HatchetOrchestrationProvider,
+    SimpleOrchestrationProvider,
+)
 
 from .api.auth_router import AuthRouter
 from .api.ingestion_router import IngestionRouter
@@ -16,7 +23,9 @@ class R2RApp:
     def __init__(
         self,
         config: R2RConfig,
-        orchestration_provider: OrchestrationProvider,
+        orchestration_provider: Union[
+            HatchetOrchestrationProvider, SimpleOrchestrationProvider
+        ],
         auth_router: AuthRouter,
         ingestion_router: IngestionRouter,
         management_router: ManagementRouter,
@@ -31,6 +40,17 @@ class R2RApp:
         self.kg_router = kg_router
         self.orchestration_provider = orchestration_provider
         self.app = FastAPI()
+
+        @self.app.exception_handler(R2RException)
+        async def r2r_exception_handler(request: Request, exc: R2RException):
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    "message": exc.message,
+                    "error_type": type(exc).__name__,
+                },
+            )
+
         self._setup_routes()
         self._apply_cors()
 

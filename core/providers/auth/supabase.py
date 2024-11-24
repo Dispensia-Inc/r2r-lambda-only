@@ -1,7 +1,7 @@
 import logging
 import os
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from supabase import Client, create_client
 
@@ -10,6 +10,7 @@ from core.base import (
     AuthProvider,
     CryptoProvider,
     DatabaseProvider,
+    EmailProvider,
     R2RException,
     Token,
     TokenData,
@@ -28,9 +29,12 @@ class SupabaseAuthProvider(AuthProvider):
         self,
         config: AuthConfig,
         crypto_provider: CryptoProvider,
-        db_provider: DatabaseProvider,
+        database_provider: DatabaseProvider,
+        email_provider: EmailProvider,
     ):
-        super().__init__(config, crypto_provider)
+        super().__init__(
+            config, crypto_provider, database_provider, email_provider
+        )
         self.supabase_url = config.extra_fields.get(
             "supabase_url", None
         ) or os.getenv("SUPABASE_URL")
@@ -38,9 +42,9 @@ class SupabaseAuthProvider(AuthProvider):
             "supabase_key", None
         ) or os.getenv("SUPABASE_KEY")
         if not self.supabase_url or not self.supabase_key:
-            raise R2RException(
+            raise HTTPException(
                 status_code=500,
-                message="Supabase URL and key must be provided",
+                detail="Supabase URL and key must be provided",
             )
         self.supabase: Client = create_client(
             self.supabase_url, self.supabase_key
@@ -65,12 +69,24 @@ class SupabaseAuthProvider(AuthProvider):
             "decode_token is not used with Supabase authentication"
         )
 
-    async def register(self, email: str, password: str) -> dict[str, str]:  # type: ignore
+    async def register(self, email: str, password: str) -> UserResponse:  # type: ignore
         # Use Supabase client to create a new user
         user = self.supabase.auth.sign_up(email=email, password=password)
 
         if user:
-            return {"message": "User registered successfully"}
+            raise R2RException(
+                status_code=400,
+                message="Supabase provider implementation is still under construction",
+            )
+            # return UserResponse(
+            #     id=user.id,
+            #     email=user.email,
+            #     is_active=True,
+            #     is_superuser=False,
+            #     created_at=user.created_at,
+            #     updated_at=user.updated_at,
+            #     is_verified=False,
+            # )
         else:
             raise R2RException(
                 status_code=400, message="User registration failed"
@@ -206,3 +222,6 @@ class SupabaseAuthProvider(AuthProvider):
     async def clean_expired_blacklisted_tokens(self):
         # Not applicable for Supabase, tokens are managed by Supabase
         pass
+
+    async def send_reset_email(self, email: str) -> dict[str, str]:
+        raise NotImplementedError("send_reset_email is not used with Supabase")

@@ -1,9 +1,8 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Type
 
 from core.base import (
     AsyncPipe,
-    R2RLoggingProvider,
     RunManager,
 )
 from core.main import (
@@ -24,6 +23,18 @@ class CustomR2RBuilder(R2RBuilder):
     def __init__(self, config: R2RConfig):
         super().__init__(config)
 
+    async def _create_providers(
+        self, provider_factory: Type[CustomR2RProviderFactory], *args, **kwargs
+    ) -> Any:
+        overrides = {
+            k: v
+            for k, v in vars(self.provider_overrides).items()
+            if v is not None
+        }
+        kwargs = {**kwargs, **overrides}
+        factory = provider_factory(self.config)
+        return await factory.create_providers(*args, **kwargs)
+
     def _create_services(
         self, service_params: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -41,40 +52,47 @@ class CustomR2RBuilder(R2RBuilder):
         pipe_factory = self.pipe_factory_override or R2RPipeFactory
         pipeline_factory = self.pipeline_factory_override or R2RPipelineFactory
 
-        kwargs = {
-            # 除外するパイプのオーバーライドに空のインスタンスを渡して未処理にさせる
-            "kg_triples_extraction_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_storage_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "vector_search_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_search_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "rag_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "streaming_rag_pipe_override": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_entity_description_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_clustering_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_entity_deduplication_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_entity_deduplication_summary_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_community_summary_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            "kg_prompt_tuning_pipe": AsyncPipe(config=AsyncPipe.PipeConfig()),
-            **kwargs
-        }
-
         try:
             providers = await self._create_providers(
                 provider_factory, *args, **kwargs
             )
+
+            run_manager = RunManager(providers.logging)
+
+            async_pipe = AsyncPipe(
+                config=AsyncPipe.PipeConfig(),
+                logging_provider=providers.logging,
+                run_manager=run_manager
+            )
+
+            kwargs = {
+                # 除外するパイプのオーバーライドに空のインスタンスを渡して未処理にさせる
+                "kg_triples_extraction_pipe_override": async_pipe,
+                "kg_storage_pipe_override": async_pipe,
+                "kg_search_pipe_override": async_pipe,
+                "vector_search_pipe_override": async_pipe,
+                "vector_storage_pipe_override": async_pipe,
+                "rag_pipe_override": async_pipe,
+                "streaming_rag_pipe_override": async_pipe,
+                "kg_entity_description_pipe": async_pipe,
+                "kg_clustering_pipe": async_pipe,
+                "kg_entity_deduplication_pipe": async_pipe,
+                "kg_entity_deduplication_summary_pipe": async_pipe,
+                "kg_community_summary_pipe": async_pipe,
+                "kg_prompt_tuning_pipe": async_pipe,
+                **kwargs
+            }
+
             pipes = self._create_pipes(
                 pipe_factory, providers, *args, **kwargs
             )
             pipelines = self._create_pipelines(
-                pipeline_factory, pipes, *args, **kwargs
+                pipeline_factory, providers, pipes, *args, **kwargs
             )
 
         except Exception as e:
             logger.error(f"Error creating providers, pipes, or pipelines: {e}")
             raise
-
-        run_singleton = R2RLoggingProvider()
-        run_manager = RunManager(run_singleton)
 
         service_params = {
             "config": self.config,
@@ -83,7 +101,7 @@ class CustomR2RBuilder(R2RBuilder):
             "pipelines": pipelines,
             "agents": None,
             "run_manager": run_manager,
-            "logging_connection": None,
+            "logging_connection": providers.logging,
         }
 
         services = self._create_services(service_params)

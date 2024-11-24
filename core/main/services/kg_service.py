@@ -3,8 +3,9 @@ import math
 import time
 from typing import AsyncGenerator, Optional
 from uuid import UUID
+from fastapi import HTTPException
 
-from core.base import KGExtractionStatus, R2RLoggingProvider, RunManager
+from core.base import KGExtractionStatus, RunManager
 from core.base.abstractions import (
     GenerationConfig,
     KGCreationSettings,
@@ -13,6 +14,7 @@ from core.base.abstractions import (
     KGEntityDeduplicationType,
     R2RException,
 )
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 from core.telemetry.telemetry_decorator import telemetry_event
 
 from ..abstractions import R2RAgents, R2RPipelines, R2RPipes, R2RProviders
@@ -40,7 +42,7 @@ class KgService(Service):
         pipelines: R2RPipelines,
         agents: R2RAgents,
         run_manager: RunManager,
-        logging_connection: R2RLoggingProvider,
+        logging_connection: SqlitePersistentLoggingProvider,
     ):
         super().__init__(
             config,
@@ -153,7 +155,7 @@ class KgService(Service):
             f"KGService: Running kg_entity_description for document {document_id}"
         )
 
-        entity_count = await self.providers.kg.get_entity_count(
+        entity_count = await self.providers.database.get_entity_count(
             document_id=document_id,
             distinct=True,
             entity_table_name="chunk_entity",
@@ -277,7 +279,7 @@ class KgService(Service):
         cascade: bool,
         **kwargs,
     ):
-        return await self.providers.kg.delete_graph_for_collection(
+        return await self.providers.database.delete_graph_for_collection(
             collection_id, cascade
         )
 
@@ -288,7 +290,7 @@ class KgService(Service):
         collection_id: UUID,
         **kwargs,
     ):
-        return await self.providers.kg.delete_node_via_document_id(
+        return await self.providers.database.delete_node_via_document_id(
             collection_id, document_id
         )
 
@@ -299,7 +301,7 @@ class KgService(Service):
         kg_creation_settings: KGCreationSettings,
         **kwargs,
     ):
-        return await self.providers.kg.get_creation_estimate(
+        return await self.providers.database.get_creation_estimate(
             collection_id, kg_creation_settings
         )
 
@@ -311,62 +313,62 @@ class KgService(Service):
         **kwargs,
     ):
 
-        return await self.providers.kg.get_enrichment_estimate(
+        return await self.providers.database.get_enrichment_estimate(
             collection_id, kg_enrichment_settings
         )
 
     @telemetry_event("get_entities")
     async def get_entities(
         self,
-        collection_id: UUID,
-        offset: int = 0,
-        limit: int = 100,
+        collection_id: Optional[UUID] = None,
         entity_ids: Optional[list[str]] = None,
         entity_table_name: str = "document_entity",
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
         **kwargs,
     ):
-        return await self.providers.kg.get_entities(
-            collection_id,
-            offset,
-            limit,
-            entity_ids,
+        return await self.providers.database.get_entities(
+            collection_id=collection_id,
+            entity_ids=entity_ids,
             entity_table_name=entity_table_name,
+            offset=offset or 0,
+            limit=limit or -1,
         )
 
     @telemetry_event("get_triples")
     async def get_triples(
         self,
-        collection_id: UUID,
-        offset: int = 0,
-        limit: int = 100,
+        collection_id: Optional[UUID] = None,
         entity_names: Optional[list[str]] = None,
         triple_ids: Optional[list[str]] = None,
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
         **kwargs,
     ):
-        return await self.providers.kg.get_triples(
-            collection_id,
-            offset,
-            limit,
-            entity_names,
-            triple_ids,
+        return await self.providers.database.get_triples(
+            collection_id=collection_id,
+            entity_names=entity_names,
+            triple_ids=triple_ids,
+            offset=offset or 0,
+            limit=limit or -1,
         )
 
     @telemetry_event("get_communities")
     async def get_communities(
         self,
-        collection_id: UUID,
-        offset: int = 0,
-        limit: int = 100,
+        collection_id: Optional[UUID] = None,
         levels: Optional[list[int]] = None,
         community_numbers: Optional[list[int]] = None,
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
         **kwargs,
     ):
-        return await self.providers.kg.get_communities(
-            collection_id,
-            offset,
-            limit,
-            levels,
-            community_numbers,
+        return await self.providers.database.get_communities(
+            collection_id=collection_id,
+            levels=levels,
+            community_numbers=community_numbers,
+            offset=offset or 0,
+            limit=limit or -1,
         )
 
     @telemetry_event("get_deduplication_estimate")
@@ -376,7 +378,7 @@ class KgService(Service):
         kg_deduplication_settings: KGEntityDeduplicationSettings,
         **kwargs,
     ):
-        return await self.providers.kg.get_deduplication_estimate(
+        return await self.providers.database.get_deduplication_estimate(
             collection_id, kg_deduplication_settings
         )
 
@@ -511,9 +513,9 @@ class KgService(Service):
             results.append(result)
 
         if not results:
-            raise R2RException(
-                message="No results generated from prompt tuning",
+            raise HTTPException(
                 status_code=500,
+                detail="No results generated from prompt tuning",
             )
 
         return results[0]

@@ -8,6 +8,7 @@ from core.base import (
     AuthProvider,
     CryptoProvider,
     DatabaseProvider,
+    EmailProvider,
     R2RException
 )
 from core.base.api.models import UserResponse
@@ -18,12 +19,10 @@ class CognitoAuthProvider(AuthProvider):
             self,
             config: AuthConfig,
             crypto_provider: CryptoProvider,
-            db_provider: DatabaseProvider,
+            database_provider: DatabaseProvider,
+            email_provider: EmailProvider
     ):
-        super().__init__(config, crypto_provider)
-        self.crypto_provider = crypto_provider
-        self.db_provider = db_provider
-        self.config: AuthConfig = config
+        super().__init__(config, crypto_provider, database_provider, email_provider)
         self.client = boto3.client(
             'cognito-idp',
             # 注意：以下はLambdaの環境変数で設定しない（本番環境ではデフォルトで設定されているため）
@@ -92,4 +91,7 @@ class CognitoAuthProvider(AuthProvider):
         pass
 
     def logout(self, **kwargs):
+        pass
+
+    async def send_reset_email(self, email: str) -> dict[str, str]:
         pass

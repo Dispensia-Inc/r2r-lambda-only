@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from typing import Any, AsyncGenerator, Optional
@@ -7,23 +6,18 @@ from uuid import UUID
 from core.base import (
     AsyncState,
     CompletionProvider,
+    DatabaseProvider,
     EmbeddingProvider,
-    KGProvider,
-    PipeType,
-    PromptProvider,
-    R2RLoggingProvider,
 )
 from core.base.abstractions import (
     KGCommunityResult,
     KGEntityResult,
-    KGGlobalResult,
-    KGRelationshipResult,
     KGSearchMethod,
     KGSearchResult,
     KGSearchResultType,
     KGSearchSettings,
-    R2RException,
 )
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 
 from ..abstractions.generator_pipe import GeneratorPipe
 
@@ -37,13 +31,11 @@ class KGSearchSearchPipe(GeneratorPipe):
 
     def __init__(
         self,
-        kg_provider: KGProvider,
         llm_provider: CompletionProvider,
-        prompt_provider: PromptProvider,
+        database_provider: DatabaseProvider,
         embedding_provider: EmbeddingProvider,
         config: GeneratorPipe.PipeConfig,
-        pipe_logger: Optional[R2RLoggingProvider] = None,
-        type: PipeType = PipeType.INGESTOR,
+        logging_provider: SqlitePersistentLoggingProvider,
         *args,
         **kwargs,
     ):
@@ -52,16 +44,14 @@ class KGSearchSearchPipe(GeneratorPipe):
         """
         super().__init__(
             llm_provider,
-            prompt_provider,
+            database_provider,
             config,
-            type,
-            pipe_logger,
+            logging_provider,
             *args,
             **kwargs,
         )
-        self.kg_provider = kg_provider
+        self.database_provider = database_provider
         self.llm_provider = llm_provider
-        self.prompt_provider = prompt_provider
         self.embedding_provider = embedding_provider
         self.pipe_run_info = None
 
@@ -120,8 +110,8 @@ class KGSearchSearchPipe(GeneratorPipe):
 
             # entity search
             search_type = "__Entity__"
-            async for search_result in self.kg_provider.vector_query(  # type: ignore
-                input,
+            async for search_result in await self.database_provider.vector_query(  # type: ignore
+                message,
                 search_type=search_type,
                 search_type_limits=kg_search_settings.local_search_limits[
                     search_type
@@ -149,7 +139,7 @@ class KGSearchSearchPipe(GeneratorPipe):
             # relationship search
             # disabled for now. We will check evaluations and see if we need it
             # search_type = "__Relationship__"
-            # async for search_result in self.kg_provider.vector_query(  # type: ignore
+            # async for search_result in self.database_provider.vector_query(  # type: ignore
             #     input,
             #     search_type=search_type,
             #     search_type_limits=kg_search_settings.local_search_limits[
@@ -177,8 +167,8 @@ class KGSearchSearchPipe(GeneratorPipe):
 
             # community search
             search_type = "__Community__"
-            async for search_result in self.kg_provider.vector_query(  # type: ignore
-                input,
+            async for search_result in await self.database_provider.vector_query(  # type: ignore
+                message,
                 search_type=search_type,
                 search_type_limits=kg_search_settings.local_search_limits[
                     search_type

@@ -6,7 +6,7 @@ import os
 import time
 from copy import copy
 from io import BytesIO
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, Union
 
 import httpx
 from unstructured_client import UnstructuredClient
@@ -24,6 +24,9 @@ from core.base import (
 from core.base.abstractions import R2RSerializable
 from core.base.providers.ingestion import IngestionConfig, IngestionProvider
 from core.utils import generate_extraction_id
+
+from ...database import PostgresDBProvider
+from ...llm import LiteLLMCompletionProvider, OpenAICompletionProvider
 
 logger = logging.getLogger()
 
@@ -93,8 +96,7 @@ class UnstructuredIngestionProvider(IngestionProvider):
         DocumentType.CSV: {"advanced": parsers.CSVParserAdvanced},  # type: ignore
         DocumentType.PDF: {
             "unstructured": parsers.PDFParserUnstructured,
-            "zerox": parsers.ZeroxPDFParser,
-            "marker": parsers.PDFParserMarker,
+            "zerox": parsers.VLMPDFParser,
         },
         DocumentType.XLSX: {"advanced": parsers.XLSXParserAdvanced},  # type: ignore
     }
@@ -107,9 +109,21 @@ class UnstructuredIngestionProvider(IngestionProvider):
         DocumentType.SVG,
     }
 
-    def __init__(self, config: UnstructuredIngestionConfig):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: UnstructuredIngestionConfig,
+        database_provider: PostgresDBProvider,
+        llm_provider: Union[
+            LiteLLMCompletionProvider, OpenAICompletionProvider
+        ],
+    ):
+        super().__init__(config, database_provider, llm_provider)
         self.config: UnstructuredIngestionConfig = config
+        self.database_provider: PostgresDBProvider = database_provider
+        self.llm_provider: Union[
+            LiteLLMCompletionProvider, OpenAICompletionProvider
+        ] = llm_provider
+
         if config.provider == "unstructured_api":
             try:
                 self.unstructured_api_auth = os.environ["UNSTRUCTURED_API_KEY"]
@@ -142,25 +156,32 @@ class UnstructuredIngestionProvider(IngestionProvider):
 
             self.client = httpx.AsyncClient()
 
-        super().__init__(config)
         self.parsers: dict[DocumentType, AsyncParser] = {}
         self._initialize_parsers()
 
     def _initialize_parsers(self):
-        for doc_type, parser_infos in self.R2R_FALLBACK_PARSERS.items():
-            for parser_info in parser_infos:
+        for doc_type, parsers in self.R2R_FALLBACK_PARSERS.items():
+            for parser in parsers:
                 if (
                     doc_type not in self.config.excluded_parsers
                     and doc_type not in self.parsers
                 ):
                     # will choose the first parser in the list
-                    self.parsers[doc_type] = parser_info()
+                    self.parsers[doc_type] = parser(
+                        config=self.config,
+                        database_provider=self.database_provider,
+                        llm_provider=self.llm_provider,
+                    )
         # TODO - Reduce code duplication between Unstructured & R2R
         for doc_type, doc_parser_name in self.config.extra_parsers.items():
-            self.parsers[f"{doc_parser_name}_{str(doc_type)}"] = (
-                UnstructuredIngestionProvider.EXTRA_PARSERS[doc_type][
-                    doc_parser_name
-                ]()
+            self.parsers[
+                f"{doc_parser_name}_{str(doc_type)}"
+            ] = UnstructuredIngestionProvider.EXTRA_PARSERS[doc_type][
+                doc_parser_name
+            ](
+                config=self.config,
+                database_provider=self.database_provider,
+                llm_provider=self.llm_provider,
             )
 
     async def parse_fallback(
@@ -215,9 +236,9 @@ class UnstructuredIngestionProvider(IngestionProvider):
 
         # TODO - Cleanup this approach to be less hardcoded
         # TODO - Remove code duplication between Unstructured & R2R
-        if document.type.value in parser_overrides:
+        if document.document_type.value in parser_overrides:
             logger.info(
-                f"Using parser_override for {document.type} with input value {parser_overrides[document.type.value]}"
+                f"Using parser_override for {document.document_type} with input value {parser_overrides[document.document_type.value]}"
             )
             async for element in self.parse_fallback(
                 file_content,
@@ -226,19 +247,19 @@ class UnstructuredIngestionProvider(IngestionProvider):
             ):
                 elements.append(element)
 
-        elif document.type in self.R2R_FALLBACK_PARSERS.keys():
+        elif document.document_type in self.R2R_FALLBACK_PARSERS.keys():
             logger.info(
-                f"Parsing {document.type}: {document.id} with fallback parser"
+                f"Parsing {document.document_type}: {document.id} with fallback parser"
             )
             async for element in self.parse_fallback(
                 file_content,
                 ingestion_config=ingestion_config,
-                parser_name=document.type,
+                parser_name=document.document_type,
             ):
                 elements.append(element)
         else:
             logger.info(
-                f"Parsing {document.type}: {document.id} with unstructured"
+                f"Parsing {document.document_type}: {document.id} with unstructured"
             )
             if isinstance(file_content, bytes):
                 file_content = BytesIO(file_content)  # type: ignore

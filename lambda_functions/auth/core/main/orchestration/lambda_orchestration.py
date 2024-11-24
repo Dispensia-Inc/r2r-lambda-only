@@ -6,7 +6,7 @@ from pydantic import BaseModel, ValidationError
 from core.base.api.models import (
     GenericMessageResponse
 )
-from core.base import R2RException, UserResponse
+from core.base import R2RException
 from core.main.services.auth_service import AuthService
 
 logger = logging.getLogger()
@@ -23,7 +23,7 @@ def handle_error(func):
             return func(*args, **kwargs)
         except Exception as err:
             logger.error(str(err))
-            return GenericMessageResponse(message=err["errorMessage"])
+            raise GenericMessageResponse(message=err["errorMessage"])
     return inner
 
 

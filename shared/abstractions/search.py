@@ -7,9 +7,9 @@ from uuid import UUID
 from pydantic import Field
 
 from .base import R2RSerializable
+from .graph import EntityLevel
 from .llm import GenerationConfig
-
-from shared.abstractions.graph import EntityLevel
+from .vector import IndexMeasure
 
 
 class VectorSearchResult(R2RSerializable):
@@ -165,22 +165,6 @@ class AggregateSearchResult(R2RSerializable):
         }
 
 
-# TODO - stop duplication of this enum, move collections primitives to 'abstractions'
-class IndexMeasure(str, Enum):
-    """
-    An enum representing the types of distance measures available for indexing.
-
-    Attributes:
-        cosine_distance (str): The cosine distance measure for indexing.
-        l2_distance (str): The Euclidean (L2) distance measure for indexing.
-        max_inner_product (str): The maximum inner product measure for indexing.
-    """
-
-    cosine_distance = "cosine_distance"
-    l2_distance = "l2_distance"
-    max_inner_product = "max_inner_product"
-
-
 class HybridSearchSettings(R2RSerializable):
     full_text_weight: float = Field(
         default=1.0, description="Weight to apply to full text search"
@@ -194,6 +178,50 @@ class HybridSearchSettings(R2RSerializable):
     )
     rrf_k: int = Field(
         default=50, description="K-value for RRF (Rank Reciprocal Fusion)"
+    )
+
+
+class DocumentSearchSettings(R2RSerializable):
+    search_over_metadata: bool = Field(
+        default=True,
+        description="Whether to search over the document metadata in the search procedure",
+    )
+
+    metadata_keys: list[str] = Field(
+        default=["title"],
+        description="Metadata keys to search over",
+    )
+
+    search_over_body: bool = Field(
+        default=False,
+        description="Whether to search over the document bodies in the search procedure",
+    )
+    filters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Filters to apply to the search. Allowed operators include `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in`, and `nin`.",
+        deprecated=True,
+    )
+    search_filters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Alias for filters",
+        deprecated=True,
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Offset to paginate search results",
+    )
+    limit: int = Field(
+        default=10,
+        description="Maximum number of results to return",
+        ge=1,
+        le=1_000,
+    )
+    title_weight: float = Field(
+        default=0.5, description="Relative weight to apply to title search"
+    )
+    metadata_weight: float = Field(
+        default=0.5, description="Relative weight to apply to body search"
     )
 
 

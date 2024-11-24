@@ -3,10 +3,6 @@ from core.base import (
     DatabaseConfig,
     CryptoProvider,
     DatabaseProvider,
-    FileConfig,
-    FileProvider,
-    PromptConfig,
-    PromptProvider,
 )
 from core.main import R2RProviderFactory
 from core.main.config import R2RConfig

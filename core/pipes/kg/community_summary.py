@@ -11,14 +11,12 @@ from core.base import (
     AsyncState,
     CommunityReport,
     CompletionProvider,
+    DatabaseProvider,
     EmbeddingProvider,
     GenerationConfig,
-    KGProvider,
-    PipeType,
-    PromptProvider,
-    R2RLoggingProvider,
 )
-from shared.abstractions.graph import Entity, Triple
+from core.base.abstractions import Entity, Triple
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 
 logger = logging.getLogger()
 
@@ -30,13 +28,11 @@ class KGCommunitySummaryPipe(AsyncPipe):
 
     def __init__(
         self,
-        kg_provider: KGProvider,
+        database_provider: DatabaseProvider,
         llm_provider: CompletionProvider,
-        prompt_provider: PromptProvider,
         embedding_provider: EmbeddingProvider,
         config: AsyncPipe.PipeConfig,
-        pipe_logger: Optional[R2RLoggingProvider] = None,
-        type: PipeType = PipeType.OTHER,
+        logging_provider: SqlitePersistentLoggingProvider,
         *args,
         **kwargs,
     ):
@@ -44,14 +40,12 @@ class KGCommunitySummaryPipe(AsyncPipe):
         Initializes the KG clustering pipe with necessary components and configurations.
         """
         super().__init__(
-            pipe_logger=pipe_logger,
-            type=type,
+            logging_provider=logging_provider,
             config=config
             or AsyncPipe.PipeConfig(name="kg_community_summary_pipe"),
         )
-        self.kg_provider = kg_provider
+        self.database_provider = database_provider
         self.llm_provider = llm_provider
-        self.prompt_provider = prompt_provider
         self.embedding_provider = embedding_provider
 
     async def community_summary_prompt(
@@ -144,7 +138,7 @@ class KGCommunitySummaryPipe(AsyncPipe):
         """
 
         community_level, entities, triples = (
-            await self.kg_provider.get_community_details(
+            await self.database_provider.get_community_details(
                 community_number=community_number,
                 collection_id=collection_id,
             )
@@ -160,8 +154,8 @@ class KGCommunitySummaryPipe(AsyncPipe):
             description = (
                 (
                     await self.llm_provider.aget_completion(
-                        messages=await self.prompt_provider._get_message_payload(
-                            task_prompt_name=self.kg_provider.config.kg_enrichment_settings.community_reports_prompt,
+                        messages=await self.database_provider.prompt_handler.get_message_payload(
+                            task_prompt_name=self.database_provider.config.kg_enrichment_settings.community_reports_prompt,
                             task_inputs={
                                 "input_text": (
                                     await self.community_summary_prompt(
@@ -198,9 +192,13 @@ class KGCommunitySummaryPipe(AsyncPipe):
                 break
             except Exception as e:
                 if attempt == 2:
-                    raise ValueError(
-                        f"Failed to generate a summary for community {community_number} at level {community_level}."
-                    ) from e
+                    logger.error(
+                        f"KGCommunitySummaryPipe: Error generating community summary for community {community_number}: {e}"
+                    )
+                    return {
+                        "community_number": community_number,
+                        "error": str(e),
+                    }
 
         community_report = CommunityReport(
             community_number=community_number,
@@ -219,7 +217,7 @@ class KGCommunitySummaryPipe(AsyncPipe):
             ),
         )
 
-        await self.kg_provider.add_community_report(community_report)
+        await self.database_provider.add_community_report(community_report)
 
         return {
             "community_number": community_report.community_number,
@@ -253,7 +251,7 @@ class KGCommunitySummaryPipe(AsyncPipe):
             f"KGCommunitySummaryPipe: Checking if community summaries exist for communities {offset} to {offset + limit}"
         )
         community_numbers_exist = (
-            await self.kg_provider.check_community_reports_exist(
+            await self.database_provider.check_community_reports_exist(
                 collection_id=collection_id, offset=offset, limit=limit
             )
         )
@@ -273,11 +271,28 @@ class KGCommunitySummaryPipe(AsyncPipe):
                     )
                 )
 
+        total_jobs = len(community_summary_jobs)
+        total_errors = 0
         completed_community_summary_jobs = 0
         for community_summary in asyncio.as_completed(community_summary_jobs):
+
+            summary = await community_summary
             completed_community_summary_jobs += 1
             if completed_community_summary_jobs % 50 == 0:
                 logger.info(
-                    f"KGCommunitySummaryPipe: {completed_community_summary_jobs}/{len(community_summary_jobs)} community summaries completed, elapsed time: {time.time() - start_time:.2f} seconds"
+                    f"KGCommunitySummaryPipe: {completed_community_summary_jobs}/{total_jobs} community summaries completed, elapsed time: {time.time() - start_time:.2f} seconds"
                 )
-            yield await community_summary
+
+            if "error" in summary:
+                logger.error(
+                    f"KGCommunitySummaryPipe: Error generating community summary for community {summary['community_number']}: {summary['error']}"
+                )
+                total_errors += 1
+                continue
+
+            yield summary
+
+        if total_errors > 0:
+            raise ValueError(
+                f"KGCommunitySummaryPipe: Failed to generate community summaries for {total_errors} out of {total_jobs} communities. Please rerun the job if there are too many failures."
+            )

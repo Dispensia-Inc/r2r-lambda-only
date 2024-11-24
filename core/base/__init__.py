@@ -1,7 +1,7 @@
 from .abstractions import *
 from .agent import *
 from .api.models import *
-from .logging import *
+from .logger import *
 from .parsers import *
 from .pipeline import *
 from .pipes import *
@@ -47,6 +47,7 @@ __all__ = [
     "KGSearchSettings",
     "VectorSearchResult",
     "VectorSearchSettings",
+    "DocumentSearchSettings",
     "HybridSearchSettings",
     # KG abstractions
     "KGCreationSettings",
@@ -82,10 +83,7 @@ __all__ = [
     "LogAnalyticsConfig",
     "LogFilterCriteria",
     "LogProcessor",
-    # Logging Providers
-    "SqlitePersistentLoggingProvider",
-    "LoggingConfig",
-    "R2RLoggingProvider",
+    "PersistentLoggingConfig",
     # Run Manager
     "RunManager",
     "manage_run",
@@ -98,7 +96,6 @@ __all__ = [
     ## PIPES
     "AsyncPipe",
     "AsyncState",
-    "PipeType",
     ## PROVIDERS
     # Base provider classes
     "AppConfig",
@@ -110,6 +107,9 @@ __all__ = [
     # Crypto provider
     "CryptoConfig",
     "CryptoProvider",
+    # Email provider
+    "EmailConfig",
+    "EmailProvider",
     # Database providers
     "DatabaseConfig",
     "DatabaseProvider",
@@ -117,22 +117,13 @@ __all__ = [
     # Embedding provider
     "EmbeddingConfig",
     "EmbeddingProvider",
-    # File provider
-    "FileConfig",
-    "FileProvider",
     # Ingestion provider
     "IngestionConfig",
     "IngestionProvider",
     "ChunkingStrategy",
-    # Knowledge Graph provider
-    "KGConfig",
-    "KGProvider",
     # LLM provider
     "CompletionConfig",
     "CompletionProvider",
-    # Prompt provider
-    "PromptConfig",
-    "PromptProvider",
     ## UTILS
     "RecursiveCharacterTextSplitter",
     "TextSplitter",

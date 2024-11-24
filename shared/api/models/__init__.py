@@ -9,6 +9,7 @@ from shared.api.models.auth.responses import (
 from shared.api.models.ingestion.responses import (
     IngestionResponse,
     WrappedIngestionResponse,
+    WrappedMetadataUpdateResponse,
     WrappedUpdateResponse,
 )
 from shared.api.models.kg.responses import (
@@ -54,6 +55,7 @@ from shared.api.models.retrieval.responses import (
     RAGAgentResponse,
     RAGResponse,
     SearchResponse,
+    WrappedDocumentSearchResponse,
     WrappedRAGAgentResponse,
     WrappedRAGResponse,
     WrappedSearchResponse,
@@ -71,6 +73,7 @@ __all__ = [
     "IngestionResponse",
     "WrappedIngestionResponse",
     "WrappedUpdateResponse",
+    "WrappedMetadataUpdateResponse",
     # Restructure Responses
     "KGCreationResponse",
     "WrappedKGCreationResponse",
@@ -114,6 +117,7 @@ __all__ = [
     "RAGResponse",
     "RAGAgentResponse",
     "WrappedSearchResponse",
+    "WrappedDocumentSearchResponse",
     "WrappedRAGResponse",
     "WrappedRAGAgentResponse",
 ]

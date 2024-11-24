@@ -1,31 +1,44 @@
+from typing import Union
+
 from pydantic import BaseModel
 
 from core.agent import R2RRAGAgent, R2RStreamingRAGAgent
 from core.base.pipes import AsyncPipe
-from core.base.providers import (
-    AuthProvider,
-    CompletionProvider,
-    DatabaseProvider,
-    EmbeddingProvider,
-    FileProvider,
-    IngestionProvider,
-    KGProvider,
-    OrchestrationProvider,
-    PromptProvider,
-)
 from core.pipelines import RAGPipeline, SearchPipeline
+from core.providers import (
+    AsyncSMTPEmailProvider,
+    ConsoleMockEmailProvider,
+    HatchetOrchestrationProvider,
+    LiteLLMCompletionProvider,
+    LiteLLMEmbeddingProvider,
+    OllamaEmbeddingProvider,
+    OpenAICompletionProvider,
+    OpenAIEmbeddingProvider,
+    PostgresDBProvider,
+    R2RAuthProvider,
+    R2RIngestionProvider,
+    SimpleOrchestrationProvider,
+    SqlitePersistentLoggingProvider,
+    SupabaseAuthProvider,
+    UnstructuredIngestionProvider,
+)
 
 
 class R2RProviders(BaseModel):
-    auth: AuthProvider
-    database: DatabaseProvider
-    ingestion: IngestionProvider
-    embedding: EmbeddingProvider
-    file: FileProvider
-    kg: KGProvider
-    llm: CompletionProvider
-    orchestration: OrchestrationProvider
-    prompt: PromptProvider
+    auth: Union[R2RAuthProvider, SupabaseAuthProvider]
+    database: PostgresDBProvider
+    ingestion: Union[R2RIngestionProvider, UnstructuredIngestionProvider]
+    embedding: Union[
+        LiteLLMEmbeddingProvider,
+        OpenAIEmbeddingProvider,
+        OllamaEmbeddingProvider,
+    ]
+    llm: Union[LiteLLMCompletionProvider, OpenAICompletionProvider]
+    orchestration: Union[
+        HatchetOrchestrationProvider, SimpleOrchestrationProvider
+    ]
+    logging: SqlitePersistentLoggingProvider
+    email: Union[AsyncSMTPEmailProvider, ConsoleMockEmailProvider]
 
     class Config:
         arbitrary_types_allowed = True

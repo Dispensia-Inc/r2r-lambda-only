@@ -1,35 +1,47 @@
 import base64
 import logging
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path as pathlib_Path
 from typing import Optional, Union
 from uuid import UUID
 
 import yaml
-from fastapi import Body, Depends, File, Form, Query, UploadFile
+from fastapi import (
+    Body,
+    Depends,
+    File,
+    Form,
+    Path,
+    Query,
+    UploadFile,
+    HTTPException,
+)
 from pydantic import Json
 
-from core.base import R2RException, RawChunk, generate_document_id
-from core.base.api.models import (
-    CreateVectorIndexResponse,
-    WrappedCreateVectorIndexResponse,
-    WrappedDeleteVectorIndexResponse,
-    WrappedIngestionResponse,
-    WrappedListVectorIndicesResponse,
-    WrappedSelectVectorIndexResponse,
-    WrappedUpdateResponse,
-)
-from core.base.providers import OrchestrationProvider, Workflow
-from shared.abstractions.vector import (
+from core.base import R2RException, RawChunk, Workflow, generate_document_id
+from core.base.abstractions import (
     IndexArgsHNSW,
     IndexArgsIVFFlat,
     IndexMeasure,
     IndexMethod,
     VectorTableName,
 )
+from core.base.api.models import (
+    WrappedCreateVectorIndexResponse,
+    WrappedDeleteVectorIndexResponse,
+    WrappedIngestionResponse,
+    WrappedListVectorIndicesResponse,
+    WrappedMetadataUpdateResponse,
+    WrappedUpdateResponse,
+)
+from core.providers import (
+    HatchetOrchestrationProvider,
+    SimpleOrchestrationProvider,
+)
 
+from ...base.logger.base import RunType
 from ..services.ingestion_service import IngestionService
-from .base_router import BaseRouter, RunType
+from .base_router import BaseRouter
 
 logger = logging.getLogger()
 
@@ -38,7 +50,9 @@ class IngestionRouter(BaseRouter):
     def __init__(
         self,
         service: IngestionService,
-        orchestration_provider: OrchestrationProvider,
+        orchestration_provider: Union[
+            HatchetOrchestrationProvider, SimpleOrchestrationProvider
+        ],
         run_type: RunType = RunType.INGESTION,
     ):
         super().__init__(service, orchestration_provider, run_type)
@@ -64,6 +78,16 @@ class IngestionRouter(BaseRouter):
                     if self.orchestration_provider.config.provider != "simple"
                     else "Update task queued successfully."
                 ),
+                "update-chunk": (
+                    "Update chunk task queued successfully."
+                    if self.orchestration_provider.config.provider != "simple"
+                    else "Chunk update completed successfully."
+                ),
+                "update-document-metadata": (
+                    "Update document metadata task queued successfully."
+                    if self.orchestration_provider.config.provider != "simple"
+                    else "Document metadata update completed successfully."
+                ),
                 "create-vector-index": (
                     "Vector index creation task queued successfully."
                     if self.orchestration_provider.config.provider != "simple"
@@ -84,7 +108,9 @@ class IngestionRouter(BaseRouter):
 
     def _load_openapi_extras(self):
         yaml_path = (
-            Path(__file__).parent / "data" / "ingestion_router_openapi.yml"
+            pathlib_Path(__file__).parent
+            / "data"
+            / "ingestion_router_openapi.yml"
         )
         with open(yaml_path, "r") as yaml_file:
             yaml_content = yaml.safe_load(yaml_file)
@@ -111,6 +137,10 @@ class IngestionRouter(BaseRouter):
                 None,
                 description=ingest_files_descriptions.get("document_ids"),
             ),
+            collection_ids: Optional[Json[list[list[UUID]]]] = Form(
+                None,
+                description="Optional collection IDs for the documents, if provided the document will be assigned to them at ingestion.",
+            ),
             metadatas: Optional[Json[list[dict]]] = Form(
                 None, description=ingest_files_descriptions.get("metadatas")
             ),
@@ -127,11 +157,11 @@ class IngestionRouter(BaseRouter):
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedIngestionResponse:  # type: ignore
             """
-            Ingest files into the system.
+            Ingests files into R2R, resulting in stored `Document` objects. Each document has corresponding `Chunk` objects which are used in vector indexing and search.
 
-            This endpoint supports multipart/form-data requests, enabling you to ingest files and their associated metadatas into R2R.
+            This endpoint supports multipart/form-data requests.
 
-            A valid user authentication token is required to access this endpoint, as regular users can only ingest files for their own access. More expansive collection permissioning is under development.
+            A valid user authentication token is required to access this endpoint, as regular users can only ingest files for their own access.
             """
             # Check if the user is a superuser
             if not auth_user.is_superuser:
@@ -170,11 +200,14 @@ class IngestionRouter(BaseRouter):
                     "ingestion_config": ingestion_config,
                     "user": auth_user.model_dump_json(),
                     "size_in_bytes": content_length,
+                    "collection_ids": (
+                        collection_ids[it] if collection_ids else None
+                    ),
                     "is_update": False,
                 }
 
                 file_name = file_data["filename"]
-                await self.service.providers.file.store_file(
+                await self.service.providers.database.store_file(
                     document_id,
                     file_name,
                     file_content,
@@ -230,6 +263,10 @@ class IngestionRouter(BaseRouter):
             document_ids: Optional[Json[list[UUID]]] = Form(
                 None, description=ingest_files_descriptions.get("document_ids")
             ),
+            collection_ids: Optional[Json[list[list[UUID]]]] = Form(
+                None,
+                description="Optional collection IDs for the documents, if provided the document will be assigned to them at ingestion.",
+            ),
             metadatas: Optional[Json[list[dict]]] = Form(
                 None, description=ingest_files_descriptions.get("metadatas")
             ),
@@ -246,11 +283,11 @@ class IngestionRouter(BaseRouter):
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedUpdateResponse:
             """
-            Update existing files in the system.
+            Ingests updated files into R2R, updating the corresponding `Document` and `Chunk` objects from previous ingestion.
 
             This endpoint supports multipart/form-data requests, enabling you to update files and their associated metadatas into R2R.
 
-            A valid user authentication token is required to access this endpoint, as regular users can only update their own files. More expansive collection permissioning is under development.
+            A valid user authentication token is required to access this endpoint, as regular users can only update their own files.
             """
             if not auth_user.is_superuser:
                 for metadata in metadatas or []:
@@ -276,7 +313,7 @@ class IngestionRouter(BaseRouter):
                     )
                 )
 
-                await self.service.providers.file.store_file(
+                await self.service.providers.database.store_file(
                     document_id,
                     file_data["filename"],
                     BytesIO(content),
@@ -303,6 +340,7 @@ class IngestionRouter(BaseRouter):
                 "ingestion_config": ingestion_config,
                 "user": auth_user.model_dump_json(),
                 "is_update": True,
+                "collection_ids": collection_ids,
             }
 
             if run_with_orchestration:
@@ -346,6 +384,10 @@ class IngestionRouter(BaseRouter):
             metadata: Optional[dict] = Body(
                 None, description=ingest_files_descriptions.get("metadata")
             ),
+            collection_ids: Optional[Json[list[list[UUID]]]] = Body(
+                None,
+                description="Optional collection IDs for the documents, if provided the document will be assigned to them at ingestion.",
+            ),
             run_with_orchestration: Optional[bool] = Body(
                 True,
                 description=ingest_files_descriptions.get(
@@ -355,11 +397,9 @@ class IngestionRouter(BaseRouter):
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedIngestionResponse:
             """
-            Ingest text chunks into the system.
+            Ingests `Chunk` objects into the system as raw text and associated metadata.
 
-            This endpoint supports multipart/form-data requests, enabling you to ingest pre-parsed text chunks into R2R.
-
-            A valid user authentication token is required to access this endpoint, as regular users can only ingest chunks for their own access. More expansive collection permissioning is under development.
+            A valid user authentication token is required to access this endpoint, as regular users can only ingest chunks for their own access.
             """
             if document_id:
                 try:
@@ -379,6 +419,7 @@ class IngestionRouter(BaseRouter):
                 "chunks": [chunk.model_dump() for chunk in chunks],
                 "metadata": metadata or {},
                 "user": auth_user.model_dump_json(),
+                "collection_ids": collection_ids,
             }
             if run_with_orchestration:
                 raw_message = await self.orchestration_provider.run_workflow(
@@ -400,11 +441,125 @@ class IngestionRouter(BaseRouter):
 
                 simple_ingestor = simple_ingestion_factory(self.service)
                 await simple_ingestor["ingest-chunks"](workflow_input)
+                return [
+                    {  # type: ignore
+                        "message": "Ingestion task completed successfully.",
+                        "document_id": str(document_uuid),
+                        "task_id": None,
+                    }
+                ]
+
+        @self.router.post(
+            "/update_document_metadata/{document_id}",
+        )
+        @self.base_endpoint
+        async def update_document_metadata_app(
+            document_id: UUID = Path(
+                ..., description="The document ID of the document to update"
+            ),
+            metadata: dict = Body(
+                ...,
+                description="The new metadata to merge with existing metadata",
+            ),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> WrappedMetadataUpdateResponse:
+            """
+            Updates the metadata of a previously ingested document and its associated chunks.
+
+            A valid user authentication token is required to access this endpoint, as regular users can only update their own documents.
+            """
+
+            try:
+                workflow_input = {
+                    "document_id": str(document_id),
+                    "metadata": metadata,
+                    "user": auth_user.model_dump_json(),
+                }
+
+                logger.info(
+                    "Running document metadata update without orchestration."
+                )
+                from core.main.orchestration import simple_ingestion_factory
+
+                simple_ingestor = simple_ingestion_factory(self.service)
+                await simple_ingestor["update-document-metadata"](
+                    workflow_input
+                )
+
                 return {  # type: ignore
-                    "message": "Ingestion task completed successfully.",
-                    "document_id": str(document_uuid),
+                    "message": "Update metadata task completed successfully.",
+                    "document_id": str(document_id),
                     "task_id": None,
                 }
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error updating document metadata: {str(e)}",
+                )
+
+        @self.router.put(
+            "/update_chunk/{document_id}/{extraction_id}",
+        )
+        @self.base_endpoint
+        async def update_chunk_app(
+            document_id: UUID = Path(
+                ..., description="The document ID of the chunk to update"
+            ),
+            extraction_id: UUID = Path(
+                ..., description="The extraction ID of the chunk to update"
+            ),
+            text: str = Body(
+                ..., description="The new text content for the chunk"
+            ),
+            metadata: Optional[dict] = Body(
+                None, description="Optional updated metadata"
+            ),
+            run_with_orchestration: Optional[bool] = Body(True),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ) -> WrappedUpdateResponse:
+            """
+            Updates a previously ingested `Chunk` object into the system as raw text and associated metadata.
+
+            A valid user authentication token is required to access this endpoint, as regular users can only ingest chunks for their own access.
+            """
+
+            try:
+                workflow_input = {
+                    "document_id": str(document_id),
+                    "extraction_id": str(extraction_id),
+                    "text": text,
+                    "metadata": metadata,
+                    "user": auth_user.model_dump_json(),
+                }
+
+                if run_with_orchestration:
+                    raw_message: dict[str, Union[str, None]] = await self.orchestration_provider.run_workflow(  # type: ignore
+                        "update-chunk", {"request": workflow_input}, {}
+                    )
+                    raw_message["message"] = "Update task queued successfully."
+                    raw_message["document_ids"] = [document_id]  # type: ignore
+
+                    return raw_message  # type: ignore
+                else:
+                    logger.info("Running chunk update without orchestration.")
+                    from core.main.orchestration import (
+                        simple_ingestion_factory,
+                    )
+
+                    simple_ingestor = simple_ingestion_factory(self.service)
+                    await simple_ingestor["update-chunk"](workflow_input)
+
+                    return {  # type: ignore
+                        "message": "Update task completed successfully.",
+                        "document_ids": workflow_input["document_ids"],
+                        "task_id": None,
+                    }
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=f"Error updating chunk: {str(e)}"
+                )
 
         create_vector_index_extras = self.openapi_extras.get(
             "create_vector_index", {}
@@ -441,6 +596,10 @@ class IngestionRouter(BaseRouter):
                 None,
                 description=create_vector_descriptions.get("index_name"),
             ),
+            index_column: Optional[str] = Body(
+                None,
+                description=create_vector_descriptions.get("index_column"),
+            ),
             concurrently: bool = Body(
                 default=True,
                 description=create_vector_descriptions.get("concurrently"),
@@ -464,6 +623,7 @@ class IngestionRouter(BaseRouter):
                         "index_method": index_method,
                         "index_measure": index_measure,
                         "index_name": index_name,
+                        "index_column": index_column,
                         "index_arguments": index_arguments,
                         "concurrently": concurrently,
                     },

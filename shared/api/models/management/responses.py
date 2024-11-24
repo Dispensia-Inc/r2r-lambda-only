@@ -14,6 +14,7 @@ class UpdatePromptResponse(BaseModel):
 
 
 class PromptResponse(BaseModel):
+    prompt_id: UUID
     name: str
     template: str
     created_at: datetime
@@ -54,6 +55,8 @@ class AnalyticsResponse(BaseModel):
 class AppSettingsResponse(BaseModel):
     config: dict[str, Any]
     prompts: dict[str, Any]
+    r2r_project_name: str
+    # r2r_version: str
 
 
 class ScoreCompletionResponse(BaseModel):
@@ -89,7 +92,7 @@ class DocumentOverviewResponse(BaseModel):
     id: UUID
     title: str
     user_id: UUID
-    type: str
+    document_type: str
     created_at: datetime
     updated_at: datetime
     ingestion_status: str
@@ -125,11 +128,20 @@ class CollectionOverviewResponse(BaseModel):
     updated_at: datetime
     user_count: int
     document_count: int
+    kg_enrichment_status: str
 
 
 class ConversationOverviewResponse(BaseModel):
     conversation_id: UUID
     created_at: datetime
+    user_id: Optional[UUID] = None
+    name: Optional[str] = None
+
+
+class VerificationResult(BaseModel):
+    verification_code: str
+    expiry: datetime
+    message: Optional[str] = None
 
 
 class AddUserResponse(BaseModel):
@@ -164,6 +176,7 @@ WrappedDocumentChunkResponse = PaginatedResultsWrapper[
     list[DocumentChunkResponse]
 ]
 WrappedDeleteResponse = ResultsWrapper[None]
+WrappedVerificationResult = ResultsWrapper[VerificationResult]
 WrappedConversationsOverviewResponse = PaginatedResultsWrapper[
     list[ConversationOverviewResponse]
 ]

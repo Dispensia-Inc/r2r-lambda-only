@@ -1,24 +1,30 @@
-from typing import Any, Optional
+from typing import Any, Optional, Union
 import logging
 
 from core.base import (
-    AuthConfig,
-    DatabaseConfig,
-    CryptoProvider,
-    DatabaseProvider,
-    AuthProvider,
-    CompletionProvider,
-    EmbeddingProvider,
-    FileProvider,
     IngestionProvider,
-    PromptProvider,
+)
+from core.providers import (
+    R2RAuthProvider,
+    SupabaseAuthProvider,
+    BCryptProvider,
+    PostgresDBProvider,
+    AsyncSMTPEmailProvider,
+    ConsoleMockEmailProvider,
+    LiteLLMEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    OllamaEmbeddingProvider,
+    R2RIngestionProvider,
+    UnstructuredIngestionProvider,
+    OpenAICompletionProvider,
+    LiteLLMCompletionProvider,
+    SqlitePersistentLoggingProvider
 )
 from core.main.config import R2RConfig
-from core.providers import PostgresKGProvider
-from core.main.abstractions import R2RProviders
-from core.providers import R2RPromptProvider
+
 
 from lambda_functions.common.core.main.assembly.factory import AWSR2RProviderFactory
+from lambda_functions.common.core.main.abstractions import CustomR2RProviders
 
 logger = logging.getLogger()
 
@@ -29,27 +35,40 @@ class CustomR2RProviderFactory(AWSR2RProviderFactory):
 
     async def create_providers(
         self,
-        auth_provider_override: Optional[AuthProvider] = None,
-        crypto_provider_override: Optional[CryptoProvider] = None,
-        database_provider_override: Optional[DatabaseProvider] = None,
-        embedding_provider_override: Optional[EmbeddingProvider] = None,
-        file_provider_override: Optional[FileProvider] = None,
-        ingestion_provider_override: Optional[IngestionProvider] = None,
-        llm_provider_override: Optional[CompletionProvider] = None,
-        prompt_provider_override: Optional[PromptProvider] = None,
+        auth_provider_override: Optional[
+            Union[R2RAuthProvider, SupabaseAuthProvider]
+        ] = None,
+        crypto_provider_override: Optional[BCryptProvider] = None,
+        database_provider_override: Optional[PostgresDBProvider] = None,
+        email_provider_override: Optional[
+            Union[AsyncSMTPEmailProvider, ConsoleMockEmailProvider]
+        ] = None,
+        embedding_provider_override: Optional[
+            Union[
+                LiteLLMEmbeddingProvider,
+                OpenAIEmbeddingProvider,
+                OllamaEmbeddingProvider,
+            ]
+        ] = None,
+        ingestion_provider_override: Optional[
+            Union[R2RIngestionProvider, UnstructuredIngestionProvider]
+        ] = None,
+        llm_provider_override: Optional[
+            Union[OpenAICompletionProvider, LiteLLMCompletionProvider]
+        ] = None,
         orchestration_provider_override: Optional[Any] = None,
+        r2r_logging_provider_override: Optional[
+            SqlitePersistentLoggingProvider
+        ] = None,
         *args,
         **kwargs,
-    ) -> R2RProviders:
+    ) -> CustomR2RProviders:
         embedding_provider = (
             embedding_provider_override
             or self.create_embedding_provider(
                 self.config.embedding, *args, **kwargs
             )
         )
-
-        # インスタンス化のみ
-        ingestion_provider = IngestionProvider(self.config.ingestion)
 
         llm_provider = llm_provider_override or self.create_llm_provider(
             self.config.completion, *args, **kwargs
@@ -68,29 +87,29 @@ class CustomR2RProviderFactory(AWSR2RProviderFactory):
         )
 
         # インスタンス化のみ
-        prompt_provider = R2RPromptProvider(
-            self.config.prompt, database_provider)
-
-        # インスタンス化のみ
-        kg_provider = PostgresKGProvider(
-            self.config.kg,
+        ingestion_provider = IngestionProvider(
+            self.config.ingestion,
             database_provider,
-            embedding_provider
+            llm_provider,
+        )
+
+        email_provider = (
+            email_provider_override
+            or await self.create_email_provider(
+                self.config.email, crypto_provider, *args, **kwargs
+            )
         )
 
         auth_provider = (
             auth_provider_override
             or await self.create_auth_provider(
                 self.config.auth,
-                database_provider,
                 crypto_provider,
+                database_provider,
+                email_provider,
                 *args,
                 **kwargs,
             )
-        )
-
-        file_provider = file_provider_override or await self.create_file_provider(
-            self.config.file, database_provider, *args, **kwargs  # type: ignore
         )
 
         orchestration_provider = (
@@ -98,14 +117,19 @@ class CustomR2RProviderFactory(AWSR2RProviderFactory):
             or self.create_orchestration_provider(self.config.orchestration)
         )
 
-        return R2RProviders(
+        logging_provider = (
+            r2r_logging_provider_override
+            or SqlitePersistentLoggingProvider(self.config.logging)
+        )
+        await logging_provider.initialize()
+
+        return CustomR2RProviders(
             auth=auth_provider,
             database=database_provider,
             embedding=embedding_provider,
             ingestion=ingestion_provider,
             llm=llm_provider,
-            prompt=prompt_provider,
-            kg=kg_provider,
+            email=email_provider,
             orchestration=orchestration_provider,
-            file=file_provider,
+            logging=logging_provider,
         )

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 from core.base import (
     AuthConfig,
@@ -11,6 +11,16 @@ from core.main.config import R2RConfig
 from core.main import (
     R2RProviderFactory,
 )
+from core.providers import (
+    R2RAuthProvider,
+    SupabaseAuthProvider,
+    BCryptProvider,
+    PostgresDBProvider,
+    AsyncSMTPEmailProvider,
+    ConsoleMockEmailProvider,
+)
+
+from lambda_functions.common.core.providers.auth.cognito import CognitoAuthProvider
 
 
 class AWSR2RProviderFactory(R2RProviderFactory):
@@ -44,6 +54,37 @@ class AWSR2RProviderFactory(R2RProviderFactory):
 
             return CognitoAuthProvider(
                 auth_config, crypto_provider, db_provider
+            )
+        else:
+            raise ValueError(
+                f"Auth provider {auth_config.provider} not supported."
+            )
+
+    @staticmethod
+    async def create_auth_provider(
+        auth_config: AuthConfig,
+        crypto_provider: BCryptProvider,
+        database_provider: PostgresDBProvider,
+        email_provider: Union[
+            AsyncSMTPEmailProvider, ConsoleMockEmailProvider
+        ],
+        *args,
+        **kwargs,
+    ) -> Union[R2RAuthProvider, SupabaseAuthProvider, CognitoAuthProvider]:
+        if auth_config.provider == "r2r":
+
+            r2r_auth = R2RAuthProvider(
+                auth_config, crypto_provider, database_provider, email_provider
+            )
+            await r2r_auth.initialize()
+            return r2r_auth
+        elif auth_config.provider == "supabase":
+            return SupabaseAuthProvider(
+                auth_config, crypto_provider, database_provider, email_provider
+            )
+        elif auth_config.provider == "cognito":
+            return CognitoAuthProvider(
+                auth_config, crypto_provider, database_provider, email_provider
             )
         else:
             raise ValueError(

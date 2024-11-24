@@ -180,4 +180,7 @@ async def async_handler(event, context):
 
 def handler(event, context):
     logger.info(f"received event: {event}")
-    return get_event_loop().run_until_complete(async_handler(event, context))
+    try:
+        return get_event_loop().run_until_complete(async_handler(event, context))
+    except Exception as e:
+        return {"errorMessage": str(e)}

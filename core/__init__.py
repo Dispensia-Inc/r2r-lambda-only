@@ -79,6 +79,7 @@ __all__ = [
     "KGSearchSettings",
     "VectorSearchResult",
     "VectorSearchSettings",
+    "DocumentSearchSettings",
     "HybridSearchSettings",
     # User abstractions
     "Token",
@@ -110,9 +111,7 @@ __all__ = [
     "LogFilterCriteria",
     "LogProcessor",
     # Logging Providers
-    "SqlitePersistentLoggingProvider",
-    "LoggingConfig",
-    "R2RLoggingProvider",
+    "PersistentLoggingConfig",
     # Run Manager
     "RunManager",
     "manage_run",
@@ -125,7 +124,6 @@ __all__ = [
     ## PIPES
     "AsyncPipe",
     "AsyncState",
-    "PipeType",
     ## PROVIDERS
     # Base provider classes
     "AppConfig",
@@ -137,21 +135,18 @@ __all__ = [
     # Crypto provider
     "CryptoConfig",
     "CryptoProvider",
+    # Email provider
+    "EmailConfig",
+    "EmailProvider",
     # Database providers
     "DatabaseConfig",
     "DatabaseProvider",
     # Embedding provider
     "EmbeddingConfig",
     "EmbeddingProvider",
-    # Knowledge Graph provider
-    "KGConfig",
-    "KGProvider",
     # LLM provider
     "CompletionConfig",
     "CompletionProvider",
-    # Prompt provider
-    "PromptConfig",
-    "PromptProvider",
     ## UTILS
     "RecursiveCharacterTextSplitter",
     "TextSplitter",
@@ -201,9 +196,9 @@ __all__ = [
     "AudioParser",
     "DOCXParser",
     "ImageParser",
-    "PDFParser",
+    "VLMPDFParser",
+    "BasicPDFParser",
     "PDFParserUnstructured",
-    "PDFParserMarker",
     "PPTParser",
     # Structured parsers
     "CSVParser",
@@ -242,15 +237,12 @@ __all__ = [
     # Embeddings
     "LiteLLMEmbeddingProvider",
     "OpenAIEmbeddingProvider",
-    # KG
-    "PostgresKGProvider",
+    "OllamaEmbeddingProvider",
     # LLM
     "OpenAICompletionProvider",
-    "LiteCompletionProvider",
+    "LiteLLMCompletionProvider",
     # Ingestion
     "UnstructuredIngestionProvider",
     "R2RIngestionProvider",
     "ChunkingStrategy",
-    # Prompts
-    "R2RPromptProvider",
 ]

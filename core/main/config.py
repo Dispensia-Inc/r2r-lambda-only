@@ -1,7 +1,6 @@
 import logging
 import os
 from enum import Enum
-from pathlib import Path
 from typing import Any, Optional
 
 import toml
@@ -9,18 +8,16 @@ from pydantic import BaseModel
 
 from ..base.abstractions import GenerationConfig
 from ..base.agent.agent import AgentConfig
-from ..base.logging.r2r_logger import LoggingConfig
+from ..base.logger.base import PersistentLoggingConfig
 from ..base.providers import AppConfig
 from ..base.providers.auth import AuthConfig
 from ..base.providers.crypto import CryptoConfig
 from ..base.providers.database import DatabaseConfig
+from ..base.providers.email import EmailConfig
 from ..base.providers.embedding import EmbeddingConfig
-from ..base.providers.file import FileConfig
 from ..base.providers.ingestion import IngestionConfig
-from ..base.providers.kg import KGConfig
 from ..base.providers.llm import CompletionConfig
 from ..base.providers.orchestration import OrchestrationConfig
-from ..base.providers.prompt import PromptConfig
 
 logger = logging.getLogger()
 
@@ -44,6 +41,7 @@ class R2RConfig:
         "app": [],
         "completion": ["provider"],
         "crypto": ["provider"],
+        "email": ["provider"],
         "auth": ["provider"],
         "embedding": [
             "provider",
@@ -52,17 +50,11 @@ class R2RConfig:
             "batch_size",
             "add_title_as_prefix",
         ],
+        # TODO - deprecated, remove
         "ingestion": ["provider"],
-        "kg": [
-            "provider",
-            "batch_size",
-            "kg_enrichment_settings",
-        ],
         "logging": ["provider", "log_table"],
-        "prompt": ["provider"],
         "database": ["provider"],
         "agent": ["generation_config"],
-        "file": ["provider"],
         "orchestration": ["provider"],
     }
 
@@ -72,17 +64,13 @@ class R2RConfig:
     crypto: CryptoConfig
     database: DatabaseConfig
     embedding: EmbeddingConfig
+    email: EmailConfig
     ingestion: IngestionConfig
-    kg: KGConfig
-    logging: LoggingConfig
-    prompt: PromptConfig
+    logging: PersistentLoggingConfig
     agent: AgentConfig
-    file: FileConfig
     orchestration: OrchestrationConfig
 
-    def __init__(
-        self, config_data: dict[str, Any], base_path: Optional[Path] = None
-    ):
+    def __init__(self, config_data: dict[str, Any]):
         """
         :param config_data: dictionary of configuration parameters
         :param base_path: base path when a relative path is specified for the prompts directory
@@ -100,40 +88,41 @@ class R2RConfig:
         # Validate and set the configuration
         for section, keys in R2RConfig.REQUIRED_KEYS.items():
             # Check the keys when provider is set
-            # TODO - Clean up robust null checks
+            # TODO - remove after deprecation
+            if (
+                section == "kg" or section == "file"
+            ) and section not in default_config:
+                continue
             if "provider" in default_config[section] and (
                 default_config[section]["provider"] is not None
                 and default_config[section]["provider"] != "None"
                 and default_config[section]["provider"] != "null"
             ):
                 self._validate_config_section(default_config, section, keys)
-                if (
-                    section == "prompt"
-                    and "file_path" in default_config[section]
-                    and not Path(
-                        default_config[section]["file_path"]
-                    ).is_absolute()
-                    and base_path
-                ):
-                    # Make file_path absolute and relative to the base path
-                    default_config[section]["file_path"] = str(
-                        base_path / default_config[section]["file_path"]
-                    )
             setattr(self, section, default_config[section])
+
+        # TODO - deprecated, remove
+        try:
+            if self.kg.keys() != []:  # type: ignore
+                logger.warning(
+                    "The 'kg' section is deprecated. Please move your arguments to the 'database' section instead."
+                )
+                self.database.update(self.kg)  # type: ignore
+        except:
+            pass
 
         self.app = AppConfig.create(**self.app)  # type: ignore
         self.auth = AuthConfig.create(**self.auth, app=self.app)  # type: ignore
         self.completion = CompletionConfig.create(**self.completion, app=self.app)  # type: ignore
         self.crypto = CryptoConfig.create(**self.crypto, app=self.app)  # type: ignore
+        self.email = EmailConfig.create(**self.email, app=self.app)  # type: ignore
         self.database = DatabaseConfig.create(**self.database, app=self.app)  # type: ignore
         self.embedding = EmbeddingConfig.create(**self.embedding, app=self.app)  # type: ignore
         self.ingestion = IngestionConfig.create(**self.ingestion, app=self.app)  # type: ignore
-        self.kg = KGConfig.create(**self.kg, app=self.app)  # type: ignore
-        self.logging = LoggingConfig.create(**self.logging, app=self.app)  # type: ignore
-        self.prompt = PromptConfig.create(**self.prompt, app=self.app)  # type: ignore
+        self.logging = PersistentLoggingConfig.create(**self.logging, app=self.app)  # type: ignore
         self.agent = AgentConfig.create(**self.agent, app=self.app)  # type: ignore
-        self.file = FileConfig.create(**self.file, app=self.app)  # type: ignore
         self.orchestration = OrchestrationConfig.create(**self.orchestration, app=self.app)  # type: ignore
+
         # override GenerationConfig defaults
         GenerationConfig.set_default(
             **self.completion.generation_config.dict()
@@ -160,7 +149,7 @@ class R2RConfig:
         with open(config_path) as f:
             config_data = toml.load(f)
 
-        return cls(config_data, base_path=Path(config_path).parent)
+        return cls(config_data)
 
     def to_toml(self):
         config_data = {

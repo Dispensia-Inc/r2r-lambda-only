@@ -1,8 +1,9 @@
 # TODO - Cleanup the handling for non-auth configurations
 import json
 import mimetypes
+import os
 from datetime import datetime, timezone
-from typing import Any, Optional, Set
+from typing import Optional, Set, Union
 from uuid import UUID
 
 import psutil
@@ -31,19 +32,24 @@ from core.base.api.models import (
     WrappedUserOverviewResponse,
     WrappedUsersInCollectionResponse,
 )
-from core.base.logging import AnalysisTypes, LogFilterCriteria
-from core.base.providers import OrchestrationProvider
-from shared.abstractions.kg import KGRunType
+from core.base.logger import AnalysisTypes, LogFilterCriteria
+from core.providers import (
+    HatchetOrchestrationProvider,
+    SimpleOrchestrationProvider,
+)
 
+from ...base.logger.base import RunType
 from ..services.management_service import ManagementService
-from .base_router import BaseRouter, RunType
+from .base_router import BaseRouter
 
 
 class ManagementRouter(BaseRouter):
     def __init__(
         self,
         service: ManagementService,
-        orchestration_provider: OrchestrationProvider,
+        orchestration_provider: Union[
+            HatchetOrchestrationProvider, SimpleOrchestrationProvider
+        ],
         run_type: RunType = RunType.MANAGEMENT,
     ):
         super().__init__(service, orchestration_provider, run_type)
@@ -690,14 +696,6 @@ class ManagementRouter(BaseRouter):
             document_id: str = Body(..., description="Document ID"),
             collection_id: str = Body(..., description="Collection ID"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
-            run_type: Optional[KGRunType] = Body(
-                default=KGRunType.ESTIMATE,
-                description="Run type for the graph enrichment process.",
-            ),
-            kg_enrichment_settings: Optional[dict] = Body(
-                default=None,
-                description="Settings for the graph enrichment process.",
-            ),
         ) -> WrappedDeleteResponse:
             collection_uuid = UUID(collection_id)
             document_uuid = UUID(document_id)
@@ -710,37 +708,9 @@ class ManagementRouter(BaseRouter):
                     403,
                 )
 
-            enrichment = await self.service.remove_document_from_collection(
+            return await self.service.remove_document_from_collection(
                 document_uuid, collection_uuid
             )
-            if enrichment:
-                if not run_type:
-                    run_type = KGRunType.ESTIMATE
-
-                server_kg_enrichment_settings = (
-                    self.service.providers.kg.config.kg_enrichment_settings
-                )
-                if run_type is KGRunType.ESTIMATE:
-
-                    return await self.service.providers.kg.get_enrichment_estimate(
-                        collection_id, server_kg_enrichment_settings
-                    )
-
-                if kg_enrichment_settings:
-                    for key, value in kg_enrichment_settings.items():
-                        if value is not None:
-                            setattr(server_kg_enrichment_settings, key, value)
-
-                workflow_input = {
-                    "collection_id": str(collection_id),
-                    "kg_enrichment_settings": server_kg_enrichment_settings.model_dump_json(),
-                    "user": auth_user.json(),
-                }
-                await self.orchestration_provider.run_workflow(
-                    "enrich-graph", {"request": workflow_input}, {}
-                )
-
-            return None  # type: ignore
 
         @self.router.get("/document_collections/{document_id}")
         @self.base_endpoint
@@ -799,15 +769,28 @@ class ManagementRouter(BaseRouter):
         @self.base_endpoint
         async def conversations_overview_app(
             conversation_ids: list[str] = Query([]),
+            user_ids: Optional[list[str]] = Query(None),
             offset: int = Query(0, ge=0),
-            limit: int = Query(100, ge=1, le=1000),
+            limit: int = Query(100, ge=-1, le=1000),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedConversationsOverviewResponse:
             conversation_uuids = [
                 UUID(conversation_id) for conversation_id in conversation_ids
             ]
+
+            if auth_user.is_superuser:
+                user_ids = [UUID(uid) for uid in user_ids] if user_ids else None  # type: ignore
+            else:
+                if user_ids:
+                    raise R2RException(
+                        message="Non-superusers cannot query other users' conversations",
+                        status_code=403,
+                    )
+                user_ids = [auth_user.id]
+
             conversations_overview_response = (
                 await self.service.conversations_overview(
+                    user_ids=user_ids,
                     conversation_ids=conversation_uuids,
                     offset=offset,
                     limit=limit,
@@ -827,6 +810,17 @@ class ManagementRouter(BaseRouter):
             branch_id: str = Query(None, description="Branch ID"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> WrappedConversationResponse:
+
+            if not auth_user.is_superuser:
+                has_access = await self.service.verify_conversation_access(
+                    conversation_id, auth_user.id
+                )
+                if not has_access:
+                    raise R2RException(
+                        message="You do not have access to this conversation",
+                        status_code=403,
+                    )
+
             result = await self.service.get_conversation(
                 conversation_id,
                 branch_id,
@@ -838,7 +832,9 @@ class ManagementRouter(BaseRouter):
         async def create_conversation(
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> dict:
-            return await self.service.create_conversation()
+            return await self.service.create_conversation(
+                user_id=auth_user.id if auth_user else None
+            )
 
         @self.router.post("/add_message/{conversation_id}")
         @self.base_endpoint
@@ -851,6 +847,16 @@ class ManagementRouter(BaseRouter):
             metadata: Optional[dict] = Body(None, description="Metadata"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> dict:
+            if not auth_user.is_superuser:
+                has_access = await self.service.verify_conversation_access(
+                    conversation_id, auth_user.id
+                )
+                if not has_access:
+                    raise R2RException(
+                        message="You do not have access to this conversation",
+                        status_code=403,
+                    )
+
             message_id = await self.service.add_message(
                 conversation_id, message, parent_id, metadata
             )
@@ -863,6 +869,8 @@ class ManagementRouter(BaseRouter):
             message: str = Body(..., description="New content"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> dict:
+            # TODO: Add a check to see if the user has access to the message
+
             new_message_id, new_branch_id = await self.service.edit_message(
                 message_id, message
             )
@@ -871,12 +879,50 @@ class ManagementRouter(BaseRouter):
                 "new_branch_id": new_branch_id,
             }
 
+        @self.router.patch("/messages/{message_id}/metadata")
+        @self.base_endpoint
+        async def update_message_metadata(
+            message_id: str = Path(..., description="Message ID"),
+            metadata: dict = Body(..., description="Metadata to update"),
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ):
+            """Update metadata for a specific message.
+
+            The provided metadata will be merged with existing metadata.
+            New keys will be added, existing keys will be updated.
+            """
+            await self.service.update_message_metadata(message_id, metadata)
+            return "ok"
+
+        @self.router.get("/export/messages")
+        @self.base_endpoint
+        async def export_messages(
+            auth_user=Depends(self.service.providers.auth.auth_wrapper),
+        ):
+            if not auth_user.is_superuser:
+                raise R2RException(
+                    "Only an authorized user can call the `export/messages` endpoint.",
+                    403,
+                )
+            return await self.service.export_messages_to_csv(
+                return_type="stream"
+            )
+
         @self.router.get("/branches_overview/{conversation_id}")
         @self.base_endpoint
         async def branches_overview(
             conversation_id: str = Path(..., description="Conversation ID"),
             auth_user=Depends(self.service.providers.auth.auth_wrapper),
         ) -> dict:
+            if not auth_user.is_superuser:
+                has_access = await self.service.verify_conversation_access(
+                    conversation_id, auth_user.id
+                )
+                if not has_access:
+                    raise R2RException(
+                        message="You do not have access to this conversation's branches",
+                        status_code=403,
+                    )
             branches = await self.service.branches_overview(conversation_id)
             return {"branches": branches}
 

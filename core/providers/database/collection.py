@@ -3,10 +3,12 @@ import logging
 from datetime import datetime
 from typing import Optional, Union
 from uuid import UUID, uuid4
+from fastapi import HTTPException
 
 from core.base import (
     CollectionHandler,
     DatabaseConfig,
+    KGExtractionStatus,
     R2RException,
     generate_default_user_collection_id,
 )
@@ -34,7 +36,7 @@ class PostgresCollectionHandler(CollectionHandler):
         self.config = config
         super().__init__(project_name, connection_manager)
 
-    async def create_table(self) -> None:
+    async def create_tables(self) -> None:
         query = f"""
         CREATE TABLE IF NOT EXISTS {self._get_table_name(PostgresCollectionHandler.TABLE_NAME)} (
             collection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -304,7 +306,9 @@ class PostgresCollectionHandler(CollectionHandler):
         if not await self.collection_exists(collection_id):
             raise R2RException(status_code=404, message="Collection not found")
         query = f"""
-            SELECT d.document_id, d.user_id, d.type, d.metadata, d.title, d.version, d.size_in_bytes, d.ingestion_status, d.created_at, d.updated_at, COUNT(*) OVER() AS total_entries
+            SELECT d.document_id, d.user_id, d.type, d.metadata, d.title, d.version,
+                d.size_in_bytes, d.ingestion_status, d.kg_extraction_status, d.created_at, d.updated_at,
+                COUNT(*) OVER() AS total_entries
             FROM {self._get_table_name('document_info')} d
             WHERE $1 = ANY(d.collection_ids)
             ORDER BY d.created_at DESC
@@ -320,16 +324,19 @@ class PostgresCollectionHandler(CollectionHandler):
         documents = [
             DocumentInfo(
                 id=row["document_id"],
+                collection_ids=[collection_id],
                 user_id=row["user_id"],
-                type=DocumentType(row["type"]),
+                document_type=DocumentType(row["type"]),
                 metadata=json.loads(row["metadata"]),
                 title=row["title"],
                 version=row["version"],
                 size_in_bytes=row["size_in_bytes"],
                 ingestion_status=IngestionStatus(row["ingestion_status"]),
+                kg_extraction_status=KGExtractionStatus(
+                    row["kg_extraction_status"]
+                ),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
-                collection_ids=[collection_id],
             )
             for row in results
         ]
@@ -346,14 +353,14 @@ class PostgresCollectionHandler(CollectionHandler):
         """Get an overview of collections, optionally filtered by collection IDs, with pagination."""
         query = f"""
             WITH collection_overview AS (
-                SELECT g.collection_id, g.name, g.description, g.created_at, g.updated_at,
+                SELECT g.collection_id, g.name, g.description, g.created_at, g.updated_at, g.kg_enrichment_status,
                     COUNT(DISTINCT u.user_id) AS user_count,
                     COUNT(DISTINCT d.document_id) AS document_count
                 FROM {self._get_table_name(PostgresCollectionHandler.TABLE_NAME)} g
                 LEFT JOIN {self._get_table_name('users')} u ON g.collection_id = ANY(u.collection_ids)
                 LEFT JOIN {self._get_table_name('document_info')} d ON g.collection_id = ANY(d.collection_ids)
                 {' WHERE g.collection_id = ANY($1)' if collection_ids else ''}
-                GROUP BY g.collection_id, g.name, g.description, g.created_at, g.updated_at
+                GROUP BY g.collection_id, g.name, g.description, g.created_at, g.updated_at, g.kg_enrichment_status
             ),
             counted_overview AS (
                 SELECT *, COUNT(*) OVER() AS total_entries
@@ -387,6 +394,7 @@ class PostgresCollectionHandler(CollectionHandler):
                 updated_at=row["updated_at"],
                 user_count=row["user_count"],
                 document_count=row["document_count"],
+                kg_enrichment_status=row["kg_enrichment_status"],
             )
             for row in results
         ]
@@ -488,9 +496,9 @@ class PostgresCollectionHandler(CollectionHandler):
             # Re-raise R2RExceptions as they are already handled
             raise
         except Exception as e:
-            raise R2RException(
+            raise HTTPException(
                 status_code=500,
-                message=f"An error '{e}' occurred while assigning the document to the collection",
+                detail=f"An error '{e}' occurred while assigning the document to the collection",
             )
 
     async def document_collections(

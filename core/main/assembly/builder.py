@@ -10,14 +10,13 @@ from core.base import (
     CryptoProvider,
     DatabaseProvider,
     EmbeddingProvider,
-    KGProvider,
     OrchestrationProvider,
-    PromptProvider,
-    R2RLoggingProvider,
     RunManager,
 )
 from core.pipelines import KGEnrichmentPipeline, RAGPipeline, SearchPipeline
+from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
 
+from ..abstractions import R2RProviders
 from ..api.auth_router import AuthRouter
 from ..api.ingestion_router import IngestionRouter
 from ..api.kg_router import KGRouter
@@ -45,9 +44,7 @@ class ProviderOverrides:
     auth: Optional[AuthProvider] = None
     database: Optional[DatabaseProvider] = None
     embedding: Optional[EmbeddingProvider] = None
-    kg: Optional[KGProvider] = None
     llm: Optional[CompletionProvider] = None
-    prompt: Optional[PromptProvider] = None
     crypto: Optional[CryptoProvider] = None
     orchestration: Optional[OrchestrationProvider] = None
 
@@ -163,6 +160,7 @@ class R2RBuilder:
     def _create_pipelines(
         self,
         pipeline_factory: type[R2RPipelineFactory],
+        providers: R2RProviders,
         pipes: Any,
         *args,
         **kwargs,
@@ -173,9 +171,9 @@ class R2RBuilder:
             if v is not None
         }
         kwargs.update(override_dict)
-        return pipeline_factory(self.config, pipes).create_pipelines(
-            *args, **kwargs
-        )
+        return pipeline_factory(
+            self.config, providers, pipes
+        ).create_pipelines(*args, **kwargs)
 
     def _create_services(
         self, service_params: Dict[str, Any]
@@ -202,7 +200,7 @@ class R2RBuilder:
                 pipe_factory, providers, *args, **kwargs
             )
             pipelines = self._create_pipelines(
-                pipeline_factory, pipes, *args, **kwargs
+                pipeline_factory, providers, pipes, *args, **kwargs
             )
         except Exception as e:
             logger.error(f"Error creating providers, pipes, or pipelines: {e}")
@@ -215,8 +213,7 @@ class R2RBuilder:
             overrides={"rag_agent": self.rag_agent_override}, *args, **kwargs
         )
 
-        run_singleton = R2RLoggingProvider()
-        run_manager = RunManager(run_singleton)
+        run_manager = RunManager(providers.logging)
 
         service_params = {
             "config": self.config,
@@ -225,7 +222,7 @@ class R2RBuilder:
             "pipelines": pipelines,
             "agents": agents,
             "run_manager": run_manager,
-            "logging_connection": run_singleton,
+            "logging_connection": providers.logging,
         }
 
         services = self._create_services(service_params)
