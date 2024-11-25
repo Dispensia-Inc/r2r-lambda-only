@@ -39,6 +39,9 @@ class CognitoAuthProvider(AuthProvider):
                          for attr in response["UserAttributes"]}
             user_data["name"] = response["Username"]
 
+            # テレメトリ送信時にユーザーIDも送りたいため必要
+            os.environ["COGNITO_USER_ID"] = user_data["sub"]
+
             return UserResponse(
                 id=user_data["sub"],
                 email=user_data["email"],
