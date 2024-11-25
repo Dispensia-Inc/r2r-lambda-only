@@ -21,7 +21,8 @@ from core.base import (
 from core.base.api.models import RAGResponse, SearchResponse, UserResponse
 from core.base.logger.base import RunType
 from core.providers.logger.r2r_logger import SqlitePersistentLoggingProvider
-from core.telemetry.telemetry_decorator import telemetry_event
+# telemetry_eventはカスタムしたものを使う
+from lambda_functions.common.core.telemetry.telemetry_decorator import telemetry_event
 
 from ..abstractions import R2RAgents, R2RPipelines, R2RPipes, R2RProviders
 from ..config import R2RConfig
@@ -296,11 +297,13 @@ class RetrievalService(Service):
                         )
                         if not conversation:
                             logger.error(
-                                f"No conversation found for ID: {conversation_id}"
+                                f"No conversation found for ID: {
+                                    conversation_id}"
                             )
                             raise R2RException(
                                 status_code=404,
-                                message=f"Conversation not found: {conversation_id}",
+                                message=f"Conversation not found: {
+                                    conversation_id}",
                             )
                         messages = [conv[1] for conv in conversation] + [  # type: ignore
                             message
@@ -332,7 +335,8 @@ class RetrievalService(Service):
                 message_id = await self.logging_connection.add_message(
                     conversation_id,  # type: ignore
                     current_message,  # type: ignore
-                    parent_id=str(ids[-2]) if (ids and len(ids) > 1) else None,  # type: ignore
+                    parent_id=str(ids[-2]) if (ids and len(ids)
+                                               > 1) else None,  # type: ignore
                 )
 
                 if rag_generation_config.stream:
