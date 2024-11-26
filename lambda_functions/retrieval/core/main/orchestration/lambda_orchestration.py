@@ -16,22 +16,22 @@ def handle_error(func):
         try:
             return func(*args, **kwargs)
         except Exception as err:
-            logger.error(str(err))
-            raise LambdaException(err["errorMessage"], 500)
+            logger.error(f"handle_error: {err}")
+            raise LambdaException(err, 500)
+        except AttributeError as err:
+            logger.error(f"handle_error: {err}")
+            raise LambdaException(err, 500)
     return inner
-
-
-class Services:
-    auth: AuthService
-    retrieval: RetrievalService
 
 
 class LambdaOrchestration:
     def __init__(
         self,
-        services: Services
+        auth: AuthService,
+        retrieval: RetrievalService
     ):
-        self.services: Services = services
+        self.auth_service = auth
+        self.retrieval_service = retrieval
 
     @handle_error
     def _select_filters(
@@ -85,7 +85,7 @@ class LambdaOrchestration:
         query: str,
         selected_collection_ids: List[UUID] = [],
     ):
-        auth_user = self.services.auth.user(token)
+        auth_user = await self.auth_service.user(token)
 
         vector_search_settings = VectorSearchSettings(
             use_hybrid_search=True,
@@ -103,9 +103,9 @@ class LambdaOrchestration:
             auth_user, kg_search_settings
         )
 
-        response = await self.services.retrieval.search(
+        response = await self.retrieval_service.search(
             query,
             vector_search_settings,
             kg_search_settings
         )
-        return response.model_dump()
+        return response

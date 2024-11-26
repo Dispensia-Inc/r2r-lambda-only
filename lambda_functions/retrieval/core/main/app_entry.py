@@ -102,9 +102,8 @@ async def async_handler(event, context):
     request_method = event["httpMethod"]
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
-    # TODO: 会社IDをバリデーションしてfalseならここでraiseする
-    identification_name = get_body(
-        event["body"], ["x-acc-identification-name"])
+    # TODO: 会社IDを存在するものかバリデーションしてfalseならここでraiseする
+    identification_name = event["headers"]["x-acc-identification-name"]
     if identification_name:
         os.environ["R2R_PROJECT_NAME"] = identification_name
     else:

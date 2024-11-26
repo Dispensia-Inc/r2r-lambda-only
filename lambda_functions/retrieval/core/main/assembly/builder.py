@@ -104,4 +104,4 @@ class CustomR2RBuilder(R2RBuilder):
 
         services = self._create_services(service_params)
 
-        return LambdaOrchestration(services)
+        return LambdaOrchestration(**services)
