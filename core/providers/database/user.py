@@ -47,6 +47,7 @@ class PostgresUserHandler(UserHandler):
         """
         await self.connection_manager.execute_query(query)
 
+    # TODO: get_user_by_idのクエリのカラムを拡張する
     async def get_user_by_id(self, user_id: UUID) -> UserResponse:
         query, _ = (
             QueryBuilder(self._get_table_name("users"))
@@ -74,6 +75,7 @@ class PostgresUserHandler(UserHandler):
         if not result:
             raise R2RException(status_code=404, message="User not found")
 
+        # TODO: ユーザーレスポンスを拡張させる
         return UserResponse(
             id=result["user_id"],
             email=result["email"],
@@ -141,7 +143,8 @@ class PostgresUserHandler(UserHandler):
             if e.status_code != 404:
                 raise e
 
-        hashed_password = self.crypto_provider.get_password_hash(password)  # type: ignore
+        hashed_password = self.crypto_provider.get_password_hash(
+            password)  # type: ignore
         query = f"""
             INSERT INTO {self._get_table_name(PostgresUserHandler.TABLE_NAME)}
             (email, user_id, hashed_password, collection_ids)

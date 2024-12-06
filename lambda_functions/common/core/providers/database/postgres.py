@@ -30,6 +30,8 @@ class CustomPostgresDBProvider(PostgresDBProvider):
             *args,
             **kwargs
         )
+        # TODO: ユーザーテーブルを拡張する
+        self.user_handler = CustomPostgresUserHandler()
 
     async def initialize(self):
         logger.info("Initializing `PostgresDBProvider`.")
