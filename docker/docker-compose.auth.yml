@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile.auth
-    container_name: r2r-lambda
+    container_name: r2r-lambda-auth
     env_file:
       - ../.env
     ports:

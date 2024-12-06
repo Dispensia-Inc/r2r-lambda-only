@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ingestion
-    container_name: r2r-lambda
+    container_name: r2r-lambda-ingestion
     ports:
       - "9000:8080"
     networks:
