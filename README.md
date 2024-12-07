@@ -25,12 +25,7 @@
 - `R2R_PROJECT_NAME`は PostgreSQL のスキーマ名になります
 - `OPENAI_API_KEY`には OpenAI の API キーを指定します
 
-### Docker を使わないローカル環境のみ
-
-> [!NOTE]  
-> Docker を使わない場合のみ以下のセットアップ作業を行ってください
-
-- 仮想環境を作成する
+### 仮想環境を作成する
 
 ```bash
 python -m venv accelerate-workspace
@@ -46,7 +41,8 @@ python -m venv accelerate-workspace
 . accelerate-workspace/bin/activate
 ```
 
-- 仮想環境から出る
+- （仮想環境から出る)
+
 
 ```bash
 deactivate
@@ -79,17 +75,12 @@ make docker-run-auth
 
 ## 動作確認
 
-- ローカルの Docker で R2R に対してヘルスチェックを行うリクエスト
+- ローカルの Docker で ユーザー取得を行うリクエスト
 
 ```bash
-curl -X "POST" "http://localhost:7272/health"
+curl -X "POST" "http://localhost:7272/user" -H "Authrization: Bearer <cognito-access-token>"- d '{"x-acc-identification-name": "dispensia"}'
 ```
 
-- レスポンス
-
-```bash
-{"isBase64Encoded": false, "statusCode": 200, "headers": {"content-length": "18", "content-type": "application/json"}, "body": "{\"message\":\"test\"}"}
-```
 
 ### モジュールインポート時間の計測
 
@@ -111,12 +102,14 @@ tuna prof.txt
 > 以下のコマンドを実行するには aws-cli をインストールし事前のログインが必要です。
 > https://zenn.dev/konatsu/articles/5574c1f83757b6
 
+- Auth Worker をデプロイする場合
+
 ```bash
-make build
+make docker-build-auth
 ```
 
 ```bash
-make deploy
+make deploy-auth
 ```
 
 - デプロイが完了したら、AWS にログインして Lambda のイメージを更新してください。

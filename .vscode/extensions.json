@@ -2,6 +2,7 @@
   "recommendations": [
     "ms-python.autopep8",
     "boto3typed.boto3-ide",
-    "ms-python.vscode-pylance"
+    "ms-python.vscode-pylance",
+    "ms-azuretools.vscode-docker"
   ]
 }
