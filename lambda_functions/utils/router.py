@@ -36,10 +36,10 @@ class Router():
 
         return params_dict
 
-    def handler(self, event):
+    async def handler(self, event):
         method = event["httpMethod"]
         path = event["path"]
         key = self.gen_func_key(method, path)
         target = self.decorated_functions[key]
         kwargs = self.get_path_params(target['path'], path)
-        target['function'](**kwargs)
+        return await target['function'](**kwargs)
