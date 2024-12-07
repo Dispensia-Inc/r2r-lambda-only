@@ -13,7 +13,7 @@ from core.main import (
 )
 from core.main.services import RetrievalService
 from core.main.services.management_service import ManagementService
-from src.main.assembly.factory import CustomR2RProviderFactory
+from .factory import CustomR2RProviderFactory
 
 from ..orchestration.lambda_orchestration import LambdaOrchestration
 from lambda_functions.common.core.main.services.auth_service import CognitoAuthService
@@ -42,7 +42,7 @@ class CustomR2RBuilder(R2RBuilder):
     ) -> Dict[str, Any]:
         services = {}
         services["auth"] = CognitoAuthService(**service_params)
-        services["management"] = ManagementService(**service_params)
+        services["service"] = ManagementService(**service_params)  # 'management' から 'service' に変更
         services["retrieval"] = RetrievalService(**service_params)
         return services
 
@@ -105,5 +105,6 @@ class CustomR2RBuilder(R2RBuilder):
         }
 
         services = self._create_services(service_params)
-
+        
+        logger.info("Services initialized successfully")
         return LambdaOrchestration(**services)

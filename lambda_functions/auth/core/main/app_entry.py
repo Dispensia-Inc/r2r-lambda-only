@@ -102,8 +102,8 @@ async def async_handler(event, context):
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
     # TODO: 会社IDをバリデーションしてfalseならここでreturnする
-    os.environ["R2R_PROJECT_NAME"] = get_body(
-        event["body"], ["x-acc-identification-name"])
+    # os.environ["R2R_PROJECT_NAME"] = get_body(
+    #     event["body"], ["x-acc-identification-name"])
 
     response_data = {}
 

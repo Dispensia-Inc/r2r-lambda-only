@@ -66,17 +66,17 @@ class LambdaOrchestration:
         collection_uuid = UUID(collection_id)
         
         if (
-                not auth_user.is_superuser
-                and collection_uuid not in auth_user.collection_ids
-            ):
-                raise R2RException(
-                    "The currently authenticated user does not have access to the specified collection.",
-                    403,
-                )
-
-            return await self.service.update_collection(  # type: ignore
-                collection_uuid, name, description
+            not auth_user.is_superuser
+            and collection_uuid not in auth_user.collection_ids
+        ):
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
             )
+
+        return await self.service.update_collection(  # type: ignore
+            collection_uuid, name, description
+        )
 
     @handle_error
     async def get_collection(
@@ -87,13 +87,13 @@ class LambdaOrchestration:
         auth_user = await self.auth_service.user(token)
         collection_uuid = UUID(collection_id)
         if (
-                not auth_user.is_superuser
-                and collection_uuid not in auth_user.collection_ids
-            ):
-                raise R2RException(
-                    "The currently authenticated user does not have access to the specified collection.",
-                    403,
-                )
+            not auth_user.is_superuser
+            and collection_uuid not in auth_user.collection_ids
+        ):
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
+            )
 
         result = await self.service.get_collection(collection_uuid)
         return result  # type: ignore
@@ -108,12 +108,12 @@ class LambdaOrchestration:
         collection_uuid = UUID(collection_id)
         
         if (
-                not auth_user.is_superuser
-                and collection_uuid not in auth_user.collection_ids
-            ):
-                raise R2RException(
-                    "The currently authenticated user does not have access to the specified collection.",
-                    403,
-                )
+            not auth_user.is_superuser
+            and collection_uuid not in auth_user.collection_ids
+        ):
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
+            )
 
         return await self.service.delete_collection(collection_uuid)

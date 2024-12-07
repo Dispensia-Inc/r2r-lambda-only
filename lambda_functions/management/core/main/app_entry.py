@@ -89,77 +89,89 @@ def get_token(event) -> str:
 
 
 def get_body(body: str, keys: list[str]) -> dict:
-    body = json.loads(body)
-    res = {}
-    for key in keys:
-        res[key] = body[key] if key in body.keys() else None
-    return res
+    try:
+        body = json.loads(body)
+        res = {}
+        for key in keys:
+            res[key] = body[key] if key in body.keys() else None
+        return res
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse request body: {e}")
+        raise LambdaException(
+            message="Invalid request body",
+            status_code=400,
+            detail={"error": str(e)}
+        )
 
 
 async def async_handler(event, context):
-
     path_prefix = "/management"
     request_path = event["path"].replace(path_prefix, "")
     request_method = event["httpMethod"]
     logger.info(f"request path: {request_path}")
     logger.info(f"request method: {request_method}")
-    # TODO: 会社IDを存在するものかバリデーションしてfalseならここでraiseする
-    identification_name = event["headers"]["x-acc-identification-name"]
-    if identification_name:
-        os.environ["R2R_PROJECT_NAME"] = identification_name
-    else:
-        raise LambdaException(
-            "x-acc-identification-name header was not found.", 404)
+    # TODO: 会社IDをバリデーションしてfalseならここでreturnする
+    # os.environ["R2R_PROJECT_NAME"] = get_body(
+    #     event["body"], ["x-acc-identification-name"])
 
-    response_data = {}
+    try:
+        response_data = {}
 
-    # R2Rを初期化
-    r2r_app = await create_r2r_app(
-        config_name=config_name,
-        config_path=config_path,
-    )
-    logger.info("completed build.")
+        # R2Rを初期化
+        r2r_app = await create_r2r_app(
+            config_name=config_name,
+            config_path=config_path,
+        )
+        logger.info("completed build.")
 
-    # Controller
-    match (request_path, request_method):
-
-        case ("/create_collection", "POST"):
-            token = get_token(event)
-            body = get_body(
-                event["body"], ["name", "description"]
-            )
-            response_data = r2r_app.create_collection(token, **body)
+        # Controller
+        match (request_path, request_method):
+            case ("/create_collection", "POST"):
+                token = get_token(event)
+                body = get_body(
+                    event["body"], ["name", "description"]
+                )
+                response_data = await r2r_app.create_collection(token, **body)
+                
+            case ("/update_collection", "POST"):
+                token = get_token(event)
+                # TODO: パスパラメータを取得してid変数に入れる
+                body = get_body(
+                    event["body"], ["id","name", "description"]
+                )
+                response_data = await r2r_app.update_collection(token, **body)
             
-        case ("/update_collection", "POST"):
-            token = get_token(event)
-            # TODO: パスパラメータを取得してid変数に入れる
-            body = get_body(
-                event["body"], ["id","name", "description"]
-            )
-            response_data = r2r_app.update_collection(token, **body)
-        
-        case ("/get_collection/{collection_id}", "GET"):
-            token = get_token(event)
-            collection_id = event["pathParameters"]["collection_id"]
-            collection_uuid = UUID(collection_id)
-            response_data = await r2r_app.get_collection(token, collection_uuid)
-        
-        case ("/delete_collection/{collection_id}", "DELETE"):
-            token = get_token(event)
-            collection_id = event["pathParameters"]["collection_id"]
-            collection_uuid = UUID(collection_id)
-            response_data = await r2r_app.delete_collection(token, collection_uuid)
+            case ("/get_collection/{collection_id}", "GET"):
+                token = get_token(event)
+                collection_id = event["pathParameters"]["collection_id"]
+                collection_uuid = UUID(collection_id)
+                response_data = await r2r_app.get_collection(token, collection_uuid)
             
-        case _:
-            error_response = R2RException(
-                message=f"path {event['path']} was not found.", status_code=400)
-            response_data = error_response.to_dict()
+            case ("/delete_collection/{collection_id}", "DELETE"):
+                token = get_token(event)
+                collection_id = event["pathParameters"]["collection_id"]
+                collection_uuid = UUID(collection_id)
+                response_data = await r2r_app.delete_collection(token, collection_uuid)
+                
+            case _:
+                error_response = R2RException(
+                    message=f"path {event['path']} was not found.", 
+                    status_code=400,
+                    detail={"path": event["path"]}
+                )
+                response_data = error_response.to_dict()
 
+        logger.info(f"response data: {response_data}")
+        return response_data
 
-       
-
-    logger.info(f"response data: {response_data}")
-    return response_data
+    except Exception as e:
+        logger.error(f"Error in async_handler: {str(e)}", exc_info=True)
+        error = R2RException(
+            message="Internal server error",
+            status_code=500,
+            detail={"error": str(e)}
+        )
+        return error.to_dict()
 
 
 def handler(event, context):
@@ -167,4 +179,10 @@ def handler(event, context):
     try:
         return get_event_loop().run_until_complete(async_handler(event, context))
     except Exception as e:
-        raise e
+        logger.error(f"Handler error: {str(e)}", exc_info=True)
+        error = R2RException(
+            message="Internal server error",
+            status_code=500,
+            detail={"error": str(e)}
+        )
+        return error.to_dict()
