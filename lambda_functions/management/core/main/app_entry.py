@@ -153,6 +153,30 @@ async def async_handler(event, context):
                 collection_uuid = UUID(collection_id)
                 response_data = await r2r_app.delete_collection(token, collection_uuid)
                 
+            case ("/add_user_to_collection", "POST"):
+                token = get_token(event)
+                body = get_body(
+                    event["body"], ["user_id", "collection_id"]
+                )
+                response_data = await r2r_app.add_user_to_collection(token, **body)
+                
+            case ("/remove_user_from_collection", "POST"):
+                token = get_token(event)
+                body = get_body(
+                    event["body"], ["user_id", "collection_id"]
+                )
+                response_data = await r2r_app.remove_user_from_collection(token, **body)
+            
+            case ("/user_collections/{user_id}", "GET"):
+                token = get_token(event)
+                user_id = event["pathParameters"]["user_id"]
+                user_uuid = UUID(user_id)
+                body = get_body(
+                    event["body"], ["offset", "limit"]
+                )
+                response_data = await r2r_app.user_collections(token, user_uuid, **body)
+                
+                
             case _:
                 error_response = R2RException(
                     message=f"path {event['path']} was not found.", 
@@ -163,7 +187,7 @@ async def async_handler(event, context):
 
         logger.info(f"response data: {response_data}")
         return response_data
-
+    
     except Exception as e:
         logger.error(f"Error in async_handler: {str(e)}", exc_info=True)
         error = R2RException(

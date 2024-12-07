@@ -117,3 +117,81 @@ class LambdaOrchestration:
             )
 
         return await self.service.delete_collection(collection_uuid)
+    
+    @handle_error
+    async def add_user_to_collection(
+        self,
+        token: str,
+        user_id: UUID,
+        collection_id: UUID,
+    ):
+        auth_user = await self.auth_service.user(token)
+        
+        collection_uuid = UUID(collection_id)
+        
+        user_uuid = UUID(user_id)
+        if (
+            not auth_user.is_superuser
+            and collection_uuid not in auth_user.collection_ids
+        ):
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
+            )
+
+        result = await self.service.add_user_to_collection(
+            user_uuid, collection_uuid
+        )
+        return result  # type: ignore
+    
+    @handle_error
+    async def remove_user_from_collection(
+        self,
+        token: str,
+        user_id: UUID,
+        collection_id: UUID,
+    ):
+        auth_user = await self.auth_service.user(token)
+        
+        collection_uuid = UUID(collection_id)
+        
+        user_uuid = UUID(user_id)
+        if (
+            not auth_user.is_superuser
+            and collection_uuid not in auth_user.collection_ids
+        ):
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
+            )
+
+        await self.service.remove_user_from_collection(
+            user_uuid, collection_uuid
+        )
+        return None  # type: ignore
+    
+    @handle_error
+    async def user_collections(
+        self,
+        token: str,
+        user_id: UUID,
+        offset: int,
+        limit: int,
+    ):
+        auth_user = await self.auth_service.user(token)
+        
+        if str(auth_user.id) != user_id and not auth_user.is_superuser:
+            raise R2RException(
+                "The currently authenticated user does not have access to the specified collection.",
+                403,
+            )
+        user_uuid = UUID(user_id)
+        user_collection_response = (
+            await self.service.get_collections_for_user(
+                user_uuid, offset, limit
+            )
+        )
+
+        return user_collection_response["results"], {  # type: ignore
+            "total_entries": user_collection_response["total_entries"]
+        }
