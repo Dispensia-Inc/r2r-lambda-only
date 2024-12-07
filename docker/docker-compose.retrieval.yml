@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: ./docker/Dockerfile.retrieval
-    container_name: r2r-lambda
+    container_name: r2r-lambda-retrieval
     env_file:
       - ../.env
     ports:

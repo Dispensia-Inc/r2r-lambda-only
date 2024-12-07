@@ -23,6 +23,9 @@ docker-compose-build-auth:
 docker-compose-build-retrieval:
 	docker compose -f ./docker/docker-compose.retrieval.yml -p retrieval-worker build
 
+docker-compose-build-management:
+	docker compose -f ./docker/docker-compose.management.yml -p management-worker build
+
 
 
 docker-run:
@@ -37,6 +40,8 @@ docker-run-auth:
 docker-run-retrieval:
 	docker compose -f ./docker/docker-compose.retrieval.yml -p retrieval-worker up -d
 
+docker-run-management:
+	docker compose -f ./docker/docker-compose.management.yml -p management-worker up -d
 
 
 deploy:

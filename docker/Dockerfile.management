@@ -1,0 +1,21 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# ファイルのコピー
+COPY requirements.txt ./
+COPY r2r.toml ./
+COPY pyproject.toml ./
+COPY core/ ./core/
+COPY shared/ ./shared/
+COPY lambda_functions/common/ ./lambda_functions/common/
+
+COPY lambda_functions/management/ ./lambda_functions/management/
+
+# タイムゾーンの設定
+RUN ln -sf  /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
+
+# パッケージインストール
+RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["lambda_functions.management.core.main.app_entry.handler"]
