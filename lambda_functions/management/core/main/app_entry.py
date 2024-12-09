@@ -1,6 +1,5 @@
 import os
 import logging
-from uuid import UUID
 import warnings
 import json
 from asyncio import get_event_loop
@@ -132,39 +131,39 @@ async def async_handler(event, context):
                     event["body"], ["name", "description"]
                 )
                 response_data = await r2r_app.create_collection(token, **body)
-                
+
             case ("/update_collection", "POST"):
                 token = get_token(event)
                 # TODO: パスパラメータを取得してid変数に入れる
                 body = get_body(
-                    event["body"], ["collection_id","name", "description"]
+                    event["body"], ["collection_id", "name", "description"]
                 )
                 response_data = await r2r_app.update_collection(token, **body)
-            
+
             case ("/get_collection/{collection_id}", "GET"):
                 token = get_token(event)
                 collection_id = event["pathParameters"]["collection_id"]
                 response_data = await r2r_app.get_collection(token, collection_id)
-            
+
             case ("/delete_collection/{collection_id}", "DELETE"):
                 token = get_token(event)
                 collection_id = event["pathParameters"]["collection_id"]
                 response_data = await r2r_app.delete_collection(token, collection_id)
-                
+
             case ("/add_user_to_collection", "POST"):
                 token = get_token(event)
                 body = get_body(
                     event["body"], ["user_id", "collection_id"]
                 )
                 response_data = await r2r_app.add_user_to_collection(token, **body)
-                
+
             case ("/remove_user_from_collection", "POST"):
                 token = get_token(event)
                 body = get_body(
                     event["body"], ["user_id", "collection_id"]
                 )
                 response_data = await r2r_app.remove_user_from_collection(token, **body)
-            
+
             case ("/user_collections/{user_id}", "GET"):
                 token = get_token(event)
                 user_id = event["pathParameters"]["user_id"]
@@ -172,11 +171,10 @@ async def async_handler(event, context):
                     event["body"], ["offset", "limit"]
                 )
                 response_data = await r2r_app.user_collections(token, user_id, **body)
-                
-                
+
             case _:
                 error_response = R2RException(
-                    message=f"path {event['path']} was not found.", 
+                    message=f"path {event['path']} was not found.",
                     status_code=400,
                     detail={"path": event["path"]}
                 )
@@ -184,7 +182,7 @@ async def async_handler(event, context):
 
         logger.info(f"response data: {response_data}")
         return response_data
-    
+
     except Exception as e:
         logger.error(f"Error in async_handler: {str(e)}", exc_info=True)
         error = R2RException(

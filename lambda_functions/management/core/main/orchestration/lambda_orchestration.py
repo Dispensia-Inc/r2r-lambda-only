@@ -1,12 +1,9 @@
 import logging
-from typing import Union, List, Any
 from uuid import UUID
 
 from lambda_functions.common.core.main.exception import LambdaException
-from core.base.api.models import UserResponse
 from core.main.services.auth_service import AuthService
 from core.main.services.retrieval_service import RetrievalService
-from shared.abstractions.search import VectorSearchSettings, KGSearchSettings
 from core.base import R2RException
 from core.main.services.management_service import ManagementService
 
@@ -58,13 +55,13 @@ class LambdaOrchestration:
     async def update_collection(
         self,
         token: str,
-        collection_id: UUID,
+        collection_id: str,
         name: str,
         description: str,
     ):
         auth_user = await self.auth_service.user(token)
         collection_uuid = UUID(collection_id)
-        
+
         if (
             not auth_user.is_superuser
             and collection_uuid not in auth_user.collection_ids
@@ -82,7 +79,7 @@ class LambdaOrchestration:
     async def get_collection(
         self,
         token: str,
-        collection_id: UUID,
+        collection_id: str,
     ):
         auth_user = await self.auth_service.user(token)
         collection_uuid = UUID(collection_id)
@@ -97,16 +94,16 @@ class LambdaOrchestration:
 
         result = await self.service.get_collection(collection_uuid)
         return result  # type: ignore
-    
+
     @handle_error
     async def delete_collection(
         self,
         token: str,
-        collection_id: UUID,
+        collection_id: str,
     ):
         auth_user = await self.auth_service.user(token)
         collection_uuid = UUID(collection_id)
-        
+
         if (
             not auth_user.is_superuser
             and collection_uuid not in auth_user.collection_ids
@@ -117,18 +114,18 @@ class LambdaOrchestration:
             )
 
         return await self.service.delete_collection(collection_uuid)
-    
+
     @handle_error
     async def add_user_to_collection(
         self,
         token: str,
-        user_id: UUID,
-        collection_id: UUID,
+        user_id: str,
+        collection_id: str,
     ):
         auth_user = await self.auth_service.user(token)
-        
+
         collection_uuid = UUID(collection_id)
-        
+
         user_uuid = UUID(user_id)
         if (
             not auth_user.is_superuser
@@ -143,18 +140,18 @@ class LambdaOrchestration:
             user_uuid, collection_uuid
         )
         return result  # type: ignore
-    
+
     @handle_error
     async def remove_user_from_collection(
         self,
         token: str,
-        user_id: UUID,
-        collection_id: UUID,
+        user_id: str,
+        collection_id: str,
     ):
         auth_user = await self.auth_service.user(token)
-        
+
         collection_uuid = UUID(collection_id)
-        
+
         user_uuid = UUID(user_id)
         if (
             not auth_user.is_superuser
@@ -169,17 +166,17 @@ class LambdaOrchestration:
             user_uuid, collection_uuid
         )
         return None  # type: ignore
-    
+
     @handle_error
     async def user_collections(
         self,
         token: str,
-        user_id: UUID,
+        user_id: str,
         offset: int,
         limit: int,
     ):
         auth_user = await self.auth_service.user(token)
-        
+
         if str(auth_user.id) != user_id and not auth_user.is_superuser:
             raise R2RException(
                 "The currently authenticated user does not have access to the specified collection.",
