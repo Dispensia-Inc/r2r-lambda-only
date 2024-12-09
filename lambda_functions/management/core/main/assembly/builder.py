@@ -42,8 +42,7 @@ class CustomR2RBuilder(R2RBuilder):
     ) -> Dict[str, Any]:
         services = {}
         services["auth"] = CognitoAuthService(**service_params)
-        services["service"] = ManagementService(**service_params)  # 'management' から 'service' に変更
-        services["retrieval"] = RetrievalService(**service_params)
+        services["service"] = ManagementService(**service_params)
         return services
 
     async def build(

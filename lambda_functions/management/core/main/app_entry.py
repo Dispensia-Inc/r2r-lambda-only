@@ -137,21 +137,19 @@ async def async_handler(event, context):
                 token = get_token(event)
                 # TODO: パスパラメータを取得してid変数に入れる
                 body = get_body(
-                    event["body"], ["id","name", "description"]
+                    event["body"], ["collection_id","name", "description"]
                 )
                 response_data = await r2r_app.update_collection(token, **body)
             
             case ("/get_collection/{collection_id}", "GET"):
                 token = get_token(event)
                 collection_id = event["pathParameters"]["collection_id"]
-                collection_uuid = UUID(collection_id)
-                response_data = await r2r_app.get_collection(token, collection_uuid)
+                response_data = await r2r_app.get_collection(token, collection_id)
             
             case ("/delete_collection/{collection_id}", "DELETE"):
                 token = get_token(event)
                 collection_id = event["pathParameters"]["collection_id"]
-                collection_uuid = UUID(collection_id)
-                response_data = await r2r_app.delete_collection(token, collection_uuid)
+                response_data = await r2r_app.delete_collection(token, collection_id)
                 
             case ("/add_user_to_collection", "POST"):
                 token = get_token(event)
@@ -170,11 +168,10 @@ async def async_handler(event, context):
             case ("/user_collections/{user_id}", "GET"):
                 token = get_token(event)
                 user_id = event["pathParameters"]["user_id"]
-                user_uuid = UUID(user_id)
                 body = get_body(
                     event["body"], ["offset", "limit"]
                 )
-                response_data = await r2r_app.user_collections(token, user_uuid, **body)
+                response_data = await r2r_app.user_collections(token, user_id, **body)
                 
                 
             case _:
