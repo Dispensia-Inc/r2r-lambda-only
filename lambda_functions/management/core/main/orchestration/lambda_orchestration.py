@@ -3,7 +3,6 @@ from uuid import UUID
 
 from lambda_functions.common.core.main.exception import LambdaException
 from core.main.services.auth_service import AuthService
-from core.main.services.retrieval_service import RetrievalService
 from core.base import R2RException
 from core.main.services.management_service import ManagementService
 
@@ -27,11 +26,9 @@ class LambdaOrchestration:
     def __init__(
         self,
         auth: AuthService,
-        service: ManagementService,
-        retrieval: RetrievalService
+        service: ManagementService
     ):
         self.auth_service = auth
-        self.retrieval_service = retrieval
         self.service: ManagementService = service
 
     @handle_error
